@@ -163,6 +163,80 @@ class AuthAndMultiTenancyTest {
     }
 
     @Test
+    void agentToken_authenticatesLikeJwt_butCanBeRevoked() throws Exception {
+        // 1) логин юзера → получает JWT
+        String jwt = registerAndGetToken("alice", "alicepw1");
+        String nodeId = registerNode(jwt, "alice-laptop");
+
+        // 2) выпускаем agent-токен
+        MvcResult issuedRes = mvc.perform(post("/api/v1/agent-tokens")
+                        .header("Authorization", "Bearer " + jwt)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"laptop-agent\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").exists())
+                .andExpect(jsonPath("$.info.name").value("laptop-agent"))
+                .andReturn();
+        JsonNode issued = json.readTree(issuedRes.getResponse().getContentAsString());
+        String agentToken = issued.get("token").asText();
+        String tokenId = issued.get("info").get("id").asText();
+        org.junit.jupiter.api.Assertions.assertTrue(agentToken.startsWith("agt_"));
+
+        // 3) с agent-токеном можно отправлять метрики (как от имени alice)
+        mvc.perform(post("/api/v1/metrics/nodes/" + nodeId)
+                        .header("Authorization", "Bearer " + agentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"cpu.usage\",\"value\":42.0}"))
+                .andExpect(status().isOk());
+
+        // 4) и можно читать /me — это alice
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + agentToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("alice"));
+
+        // 5) отзываем токен
+        mvc.perform(delete("/api/v1/agent-tokens/" + tokenId)
+                        .header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isNoContent());
+
+        // 6) после отзыва agent-токен больше не работает
+        mvc.perform(post("/api/v1/metrics/nodes/" + nodeId)
+                        .header("Authorization", "Bearer " + agentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"cpu.usage\",\"value\":50}"))
+                .andExpect(status().isUnauthorized());
+
+        // 7) JWT при этом продолжает работать
+        mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void agentToken_isolatedBetweenUsers() throws Exception {
+        String alice = registerAndGetToken("alice", "alicepw1");
+        String bob = registerAndGetToken("bob", "bobpw12345");
+
+        // alice выпускает токен
+        MvcResult res = mvc.perform(post("/api/v1/agent-tokens")
+                        .header("Authorization", "Bearer " + alice)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"alice-token\"}"))
+                .andReturn();
+        String tokenId = json.readTree(res.getResponse().getContentAsString())
+                .get("info").get("id").asText();
+
+        // bob не видит токен alice в своём списке
+        mvc.perform(get("/api/v1/agent-tokens").header("Authorization", "Bearer " + bob))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // bob не может отозвать токен alice
+        mvc.perform(delete("/api/v1/agent-tokens/" + tokenId)
+                        .header("Authorization", "Bearer " + bob))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void timeseriesEndpoint_works() throws Exception {
         String token = registerAndGetToken("alice", "alicepw1");
         String nodeId = registerNode(token, "alice-node");
