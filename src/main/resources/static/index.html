@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<title>Монитор распределённой системы</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+  header { padding: 18px 24px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .links a { color: #60a5fa; margin-left: 14px; text-decoration: none; font-size: 13px; }
+  header .user { font-size: 13px; color: #94a3b8; }
+  header .user b { color: #f8fafc; }
+  header button { background: #334155; color: #e2e8f0; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-left: 8px; }
+  header button:hover { background: #475569; }
+  main { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin: 0 0 12px 0; }
+  .big { font-size: 32px; font-weight: 600; color: #f8fafc; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #334155; }
+  th { color: #94a3b8; font-weight: 500; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: #273449; }
+  .status-HEALTHY { color: #22c55e; }
+  .status-DEGRADED { color: #eab308; }
+  .status-UNHEALTHY { color: #ef4444; }
+  .status-UNKNOWN { color: #94a3b8; }
+  .sev-INFO { color: #60a5fa; }
+  .sev-WARNING { color: #eab308; }
+  .sev-CRITICAL { color: #ef4444; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .muted { color: #94a3b8; font-size: 12px; }
+  #updated { font-size: 12px; color: #94a3b8; }
+
+  /* Auth screen */
+  .auth-overlay { position: fixed; inset: 0; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .auth-box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 28px; width: 360px; }
+  .auth-box h2 { margin: 0 0 18px 0; font-size: 18px; }
+  .auth-box label { display: block; font-size: 12px; color: #94a3b8; margin: 12px 0 4px; }
+  .auth-box input { width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px; }
+  .auth-box .btn-row { display: flex; gap: 8px; margin-top: 18px; }
+  .auth-box button { flex: 1; padding: 10px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+  .auth-box button.primary { background: #3b82f6; color: white; }
+  .auth-box button.primary:hover { background: #2563eb; }
+  .auth-box button.secondary { background: #334155; color: #e2e8f0; }
+  .auth-box button.secondary:hover { background: #475569; }
+  .auth-box .err { color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .auth-box .hint { font-size: 11px; color: #64748b; margin-top: 14px; line-height: 1.5; }
+
+  /* Node detail modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 50; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32px 16px; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #0f172a; border: 1px solid #334155; border-radius: 8px; width: 100%; max-width: 1100px; padding: 20px 22px; }
+  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
+  .modal-head h2 { margin: 0; font-size: 20px; }
+  .modal-head .meta { color: #94a3b8; font-size: 12px; margin-top: 4px; }
+  .modal-head .close { background: #334155; color: #e2e8f0; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .modal-head .close:hover { background: #475569; }
+  .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .controls .label { color: #94a3b8; font-size: 12px; }
+  .controls button { background: #334155; color: #e2e8f0; border: 1px solid #475569; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .controls button.active { background: #3b82f6; border-color: #3b82f6; }
+  .controls button:hover:not(.active) { background: #475569; }
+  .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+  .chart-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px; }
+  .chart-card h3 { margin: 0 0 4px 0; font-size: 14px; font-weight: 600; }
+  .chart-card .sub { color: #94a3b8; font-size: 11px; margin-bottom: 8px; }
+  .chart-card .canvas-wrap { position: relative; height: 200px; }
+  .empty-charts { color: #94a3b8; font-size: 13px; padding: 20px 0; text-align: center; }
+  .danger-row { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid #334155; }
+  .danger-row button { background: #7f1d1d; color: #fee2e2; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  .danger-row button:hover { background: #991b1b; }
+
+  /* Analyze button on chart card */
+  .chart-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .chart-head .analyze-btn { background: #1e3a8a; color: #dbeafe; border: 1px solid #3b82f6; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
+  .chart-head .analyze-btn:hover { background: #1d4ed8; }
+
+  /* Analysis modal */
+  .analysis-modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; z-index: 200; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32px 16px; }
+  .analysis-modal.open { display: flex; }
+  .analysis-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; width: 100%; max-width: 760px; padding: 22px; }
+  .analysis-box h2 { margin: 0 0 6px 0; font-size: 18px; }
+  .analysis-box .meta { color: #94a3b8; font-size: 12px; margin-bottom: 18px; }
+  .analysis-box .target-card { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 14px; margin-bottom: 18px; }
+  .analysis-box .target-card.anomaly { border-color: #ef4444; background: #2a1414; }
+  .analysis-box .target-card .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px; }
+  .analysis-box .target-card .stat { font-size: 11px; color: #94a3b8; }
+  .analysis-box .target-card .stat b { display: block; color: #f8fafc; font-size: 18px; margin-top: 2px; font-weight: 600; }
+  .analysis-box .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
+  .badge.anom { background: #7f1d1d; color: #fee2e2; }
+  .badge.norm { background: #14532d; color: #d1fae5; }
+  .badge.rising { background: #7c2d12; color: #fed7aa; }
+  .badge.falling { background: #134e4a; color: #ccfbf1; }
+  .badge.stable { background: #334155; color: #cbd5e1; }
+  .summary-box { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 14px; margin-bottom: 18px; line-height: 1.55; font-size: 13px; }
+  .summary-box .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+  .corr-list { display: flex; flex-direction: column; gap: 8px; }
+  .corr-row { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 10px 14px; }
+  .corr-row .top { display: flex; justify-content: space-between; align-items: center; }
+  .corr-row .name { font-weight: 600; font-size: 13px; }
+  .corr-row .badges { display: flex; gap: 6px; align-items: center; }
+  .corr-row .bar-wrap { margin-top: 8px; height: 6px; background: #0f172a; border-radius: 3px; position: relative; }
+  .corr-row .bar { position: absolute; top: 0; height: 100%; border-radius: 3px; }
+  .corr-row .bar.pos { background: #3b82f6; }
+  .corr-row .bar.neg { background: #ef4444; }
+  .corr-row .details { color: #94a3b8; font-size: 11px; margin-top: 6px; }
+  .strength-STRONG { background: #1e40af; color: #dbeafe; }
+  .strength-MODERATE { background: #92400e; color: #fde68a; }
+  .strength-WEAK { background: #334155; color: #cbd5e1; }
+  .empty-corrs { color: #94a3b8; font-size: 12px; padding: 14px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ====== Auth screen ====== -->
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-box">
+    <h2>Вход в систему мониторинга</h2>
+    <label>Имя пользователя</label>
+    <input id="authUsername" type="text" autocomplete="username" />
+    <label>Пароль</label>
+    <input id="authPassword" type="password" autocomplete="current-password" />
+    <div class="btn-row">
+      <button class="primary" onclick="doLogin()">Войти</button>
+      <button class="secondary" onclick="doRegister()">Регистрация</button>
+    </div>
+    <div class="err" id="authErr"></div>
+    <div class="hint">
+      По умолчанию доступен админ: <b>admin</b> / <b>admin123</b><br/>
+      Или зарегистрируйте нового пользователя — каждый видит только свои узлы.
+    </div>
+  </div>
+</div>
+
+<!-- ====== Main UI ====== -->
+<div id="appUI" style="display:none">
+<header>
+  <h1>Система мониторинга распределённых систем</h1>
+  <div>
+    <span class="user">Пользователь: <b id="currentUser">—</b> <span id="currentRole" class="muted"></span></span>
+    <button onclick="logout()">Выйти</button>
+  </div>
+  <div>
+    <span id="updated"></span>
+    <span class="links">
+      <a href="/swagger-ui.html" target="_blank">Swagger UI</a>
+      <a href="/v3/api-docs" target="_blank">OpenAPI JSON</a>
+      <a href="/actuator/health" target="_blank">Health</a>
+    </span>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+    <h2>Мои узлы</h2>
+    <div class="big" id="totalNodes">—</div>
+    <div class="grid-3" id="nodeStatusGrid" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <h2>Активные алерты</h2>
+    <div class="big" id="activeAlerts">—</div>
+    <div class="grid-3" id="alertSevGrid" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <h2>Метрики в хранилище</h2>
+    <div class="big" id="storedMetrics">—</div>
+    <div class="muted" style="margin-top: 8px;">последнее обновление: <span id="genAt">—</span></div>
+  </div>
+
+  <div class="card" style="grid-column: 1 / -1;">
+    <h2>Список узлов <span class="muted" style="text-transform: none; letter-spacing: normal;">(нажмите на строку для графиков)</span></h2>
+    <table>
+      <thead>
+        <tr><th>Имя</th><th>Тип</th><th>Хост</th><th>Статус</th><th>Heartbeat</th><th>ID</th></tr>
+      </thead>
+      <tbody id="nodesTbody"></tbody>
+    </table>
+  </div>
+
+  <div class="card" style="grid-column: 1 / -1;">
+    <h2>Последние алерты</h2>
+    <table>
+      <thead>
+        <tr><th>Время</th><th>Правило</th><th>Метрика</th><th>Значение</th><th>Severity</th><th>Статус</th></tr>
+      </thead>
+      <tbody id="alertsTbody"></tbody>
+    </table>
+  </div>
+</main>
+</div>
+
+<!-- ====== Node detail modal ====== -->
+<div id="nodeModal" class="modal-backdrop" onclick="if(event.target===this)closeNodeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2 id="nmName">—</h2>
+        <div class="meta" id="nmMeta">—</div>
+      </div>
+      <button class="close" onclick="closeNodeModal()">Закрыть</button>
+    </div>
+
+    <div class="controls">
+      <span class="label">Окно:</span>
+      <button data-window="900"   onclick="setWindow(900)">15 мин</button>
+      <button data-window="3600"  class="active" onclick="setWindow(3600)">1 час</button>
+      <button data-window="21600" onclick="setWindow(21600)">6 часов</button>
+      <button data-window="86400" onclick="setWindow(86400)">24 часа</button>
+      <span class="label" style="margin-left: 16px;">Бакет:</span>
+      <button data-bucket="10"  onclick="setBucket(10)">10с</button>
+      <button data-bucket="60"  class="active" onclick="setBucket(60)">1м</button>
+      <button data-bucket="300" onclick="setBucket(300)">5м</button>
+      <span class="label" style="margin-left: 16px;">
+        <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="nmAutoRefresh" checked /> авто-обновление 5с
+        </label>
+      </span>
+    </div>
+
+    <div id="nmCharts" class="charts-grid"></div>
+    <div id="nmEmpty" class="empty-charts" style="display:none;">
+      Этот узел ещё не присылал метрик. Отправьте хотя бы одну метрику через
+      <code>POST /api/v1/metrics/nodes/{id}</code>.
+    </div>
+
+    <div class="danger-row">
+      <button id="nmDelete" onclick="deleteCurrentNode()">Удалить узел</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Analysis modal ====== -->
+<div id="analysisModal" class="analysis-modal" onclick="if(event.target===this)closeAnalysisModal()">
+  <div class="analysis-box">
+    <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+      <div>
+        <h2>Анализ причин изменения метрики</h2>
+        <div class="meta" id="anMeta">—</div>
+      </div>
+      <button class="close" style="background:#334155;color:#e2e8f0;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:13px;" onclick="closeAnalysisModal()">Закрыть</button>
+    </div>
+
+    <div id="anLoading" style="text-align:center; color:#94a3b8; padding: 30px 0;">Считаем корреляции…</div>
+
+    <div id="anContent" style="display:none">
+      <!-- Целевая метрика -->
+      <div id="anTargetCard" class="target-card">
+        <div style="display:flex; justify-content: space-between; align-items: center;">
+          <div style="font-weight:600; font-size:15px;" id="anTargetName">—</div>
+          <div id="anTargetBadges"></div>
+        </div>
+        <div class="row">
+          <div class="stat">текущее <b id="anCurrent">—</b></div>
+          <div class="stat">среднее <b id="anMean">—</b></div>
+          <div class="stat">σ (stddev) <b id="anStddev">—</b></div>
+          <div class="stat">z-score <b id="anZ">—</b></div>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <div class="stat" style="grid-column: span 2;">тренд за окно <b id="anChange">—</b></div>
+          <div class="stat" style="grid-column: span 2;">точек измерений <b id="anSamples">—</b></div>
+        </div>
+      </div>
+
+      <!-- Текстовое резюме -->
+      <div class="summary-box">
+        <div class="label">Автоматическое резюме</div>
+        <div id="anSummary">—</div>
+      </div>
+
+      <!-- Список коррелирующих метрик -->
+      <div class="label" style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px;">
+        Топ коррелирующих метрик (вероятные сопутствующие факторы)
+      </div>
+      <div id="anCorrelations" class="corr-list"></div>
+      <div id="anEmptyCorrs" class="empty-corrs" style="display:none;">
+        Сильных корреляций с другими метриками не найдено.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN_KEY = 'monitoring.jwt';
+const USER_KEY  = 'monitoring.user';
+const fmt = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+
+// Словарь человекочитаемых названий метрик
+const METRIC_LABELS = {
+  'cpu.usage':           'CPU — загрузка (%)',
+  'cpu.count_logical':   'CPU — количество ядер',
+  'memory.used_mb':      'Память — занято (МБ)',
+  'memory.total_mb':     'Память — всего (МБ)',
+  'memory.percent':      'Память — загрузка (%)',
+  'disk.used_gb':        'Диск — занято (ГБ)',
+  'disk.total_gb':       'Диск — всего (ГБ)',
+  'disk.percent':        'Диск — заполненность (%)',
+  'net.bytes_sent_ps':   'Сеть — отправка (байт/с)',
+  'net.bytes_recv_ps':   'Сеть — приём (байт/с)',
+  'process.count':       'Процессы — количество',
+};
+
+// Возвращает читаемое название метрики, если есть в словаре, иначе — оригинал
+function metricLabel(name) {
+  return METRIC_LABELS[name] || name;
+}
+
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function setSession(resp) {
+  localStorage.setItem(TOKEN_KEY, resp.token);
+  localStorage.setItem(USER_KEY, JSON.stringify({ id: resp.userId, username: resp.username, role: resp.role }));
+}
+function clearSession() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
+  const token = getToken();
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(path, { ...opts, headers });
+  if (res.status === 401 || res.status === 403) {
+    clearSession();
+    showAuth();
+    throw new Error('Не авторизован');
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || ('HTTP ' + res.status));
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+async function doLogin() {
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!username || !password) { document.getElementById('authErr').textContent = 'Введите имя пользователя и пароль'; return; }
+  try {
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Ошибка входа');
+    }
+    const data = await res.json();
+    setSession(data);
+    showApp();
+  } catch (e) {
+    document.getElementById('authErr').textContent = e.message;
+  }
+}
+
+async function doRegister() {
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value;
+  if (!username || password.length < 6) {
+    document.getElementById('authErr').textContent = 'Имя >= 3 символов, пароль >= 6 символов';
+    return;
+  }
+  try {
+    const res = await fetch('/api/v1/auth/register', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || 'Ошибка регистрации');
+    }
+    const data = await res.json();
+    setSession(data);
+    showApp();
+  } catch (e) {
+    document.getElementById('authErr').textContent = e.message;
+  }
+}
+
+function logout() {
+  clearSession();
+  showAuth();
+}
+
+function showAuth() {
+  document.getElementById('authOverlay').style.display = 'flex';
+  document.getElementById('appUI').style.display = 'none';
+  document.getElementById('authErr').textContent = '';
+}
+
+function showApp() {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('appUI').style.display = 'block';
+  const user = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
+  document.getElementById('currentUser').textContent = user.username || '?';
+  document.getElementById('currentRole').textContent = user.role === 'ADMIN' ? '(admin)' : '';
+  refresh();
+  if (window._refreshInterval) clearInterval(window._refreshInterval);
+  window._refreshInterval = setInterval(refresh, 5000);
+}
+
+async function refresh() {
+  try {
+    const d = await api('/api/v1/dashboard/overview');
+
+    document.getElementById('totalNodes').textContent = d.totalNodes;
+    document.getElementById('activeAlerts').textContent = d.activeAlerts;
+    document.getElementById('storedMetrics').textContent = d.totalMetricsStored;
+    document.getElementById('genAt').textContent = fmt(d.generatedAt);
+    document.getElementById('updated').textContent = 'Обновлено: ' + fmt(d.generatedAt);
+
+    const nsg = document.getElementById('nodeStatusGrid');
+    nsg.innerHTML = '';
+    Object.entries(d.nodeStatusCounts || {}).forEach(([k,v]) => {
+      nsg.insertAdjacentHTML('beforeend', `<div><div class="muted">${k}</div><div class="status-${k}" style="font-size:20px">${v}</div></div>`);
+    });
+
+    const asg = document.getElementById('alertSevGrid');
+    asg.innerHTML = '';
+    Object.entries(d.alertSeverityCounts || {}).forEach(([k,v]) => {
+      asg.insertAdjacentHTML('beforeend', `<div><div class="muted">${k}</div><div class="sev-${k}" style="font-size:20px">${v}</div></div>`);
+    });
+
+    const tb = document.getElementById('nodesTbody');
+    tb.innerHTML = '';
+    (d.nodes || []).forEach(n => {
+      const tr = document.createElement('tr');
+      tr.className = 'clickable';
+      tr.onclick = () => openNodeModal(n);
+      tr.innerHTML =
+        `<td>${escapeHtml(n.name)}</td><td>${escapeHtml(n.type || '')}</td><td>${escapeHtml((n.host||'') + (n.port ? ':' + n.port : ''))}</td>
+         <td class="status-${n.status}">${n.status}</td><td>${fmt(n.lastHeartbeat)}</td><td class="muted">${n.id}</td>`;
+      tb.appendChild(tr);
+    });
+
+    const ab = document.getElementById('alertsTbody');
+    ab.innerHTML = '';
+    (d.recentAlerts || []).forEach(a => {
+      ab.insertAdjacentHTML('beforeend',
+        `<tr><td>${fmt(a.firedAt)}</td><td>${escapeHtml(a.ruleName || '')}</td><td>${escapeHtml(a.metricName)}</td>
+         <td>${a.value != null ? a.value.toFixed(3) : ''}</td>
+         <td class="sev-${a.severity}">${a.severity}</td>
+         <td>${a.status}</td></tr>`);
+    });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================================
+// Node detail modal
+// ============================================================
+
+let nm = {
+  node: null,
+  windowSeconds: 3600,
+  bucketSeconds: 60,
+  charts: {},          // metricName -> Chart.js instance
+  refreshTimer: null,
+};
+
+function openNodeModal(node) {
+  nm.node = node;
+  document.getElementById('nmName').textContent = node.name;
+  document.getElementById('nmMeta').innerHTML = [
+    `${escapeHtml(node.type || 'service')}`,
+    `${escapeHtml((node.host || '—') + (node.port ? ':' + node.port : ''))}`,
+    `<span class="status-${node.status}">${node.status}</span>`,
+    `heartbeat: ${fmt(node.lastHeartbeat)}`,
+    `id: <span class="muted">${node.id}</span>`
+  ].join(' · ');
+  document.getElementById('nodeModal').classList.add('open');
+
+  // reset charts (might have leftovers from previous open)
+  destroyCharts();
+  document.getElementById('nmCharts').innerHTML = '';
+  loadCharts();
+
+  if (nm.refreshTimer) clearInterval(nm.refreshTimer);
+  nm.refreshTimer = setInterval(() => {
+    if (document.getElementById('nmAutoRefresh').checked) loadCharts(true);
+  }, 5000);
+}
+
+function closeNodeModal() {
+  document.getElementById('nodeModal').classList.remove('open');
+  if (nm.refreshTimer) { clearInterval(nm.refreshTimer); nm.refreshTimer = null; }
+  destroyCharts();
+  nm.node = null;
+}
+
+function destroyCharts() {
+  Object.values(nm.charts).forEach(c => c.destroy());
+  nm.charts = {};
+}
+
+function setWindow(secs) {
+  nm.windowSeconds = secs;
+  document.querySelectorAll('.controls button[data-window]').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.window) === secs);
+  });
+  loadCharts();
+}
+
+function setBucket(secs) {
+  nm.bucketSeconds = secs;
+  document.querySelectorAll('.controls button[data-bucket]').forEach(b => {
+    b.classList.toggle('active', Number(b.dataset.bucket) === secs);
+  });
+  loadCharts();
+}
+
+async function loadCharts(incremental = false) {
+  if (!nm.node) return;
+  const nodeId = nm.node.id;
+
+  // 1) Получить список метрик узла (через latest) — endpoint возвращает массив Metric
+  let latestArr;
+  try {
+    latestArr = await api(`/api/v1/nodes/${nodeId}/metrics/latest`);
+  } catch (e) {
+    console.error(e);
+    return;
+  }
+
+  // строим словарь {имя_метрики -> объект Metric} из массива
+  const latest = {};
+  (latestArr || []).forEach(m => { if (m && m.name) latest[m.name] = m; });
+  const metricNames = Object.keys(latest).sort();
+  const wrap = document.getElementById('nmCharts');
+  const empty = document.getElementById('nmEmpty');
+
+  if (metricNames.length === 0) {
+    if (!incremental) {
+      destroyCharts();
+      wrap.innerHTML = '';
+      empty.style.display = 'block';
+    }
+    return;
+  }
+  empty.style.display = 'none';
+
+  // 2) Удалить чарты, которых больше нет в latest
+  Object.keys(nm.charts).forEach(name => {
+    if (!metricNames.includes(name)) {
+      nm.charts[name].destroy();
+      delete nm.charts[name];
+      const el = document.getElementById('chart-card-' + cssId(name));
+      if (el) el.remove();
+    }
+  });
+
+  // 3) Для каждой метрики — обновить или создать
+  const from = new Date(Date.now() - nm.windowSeconds * 1000).toISOString();
+  const to   = new Date().toISOString();
+
+  await Promise.all(metricNames.map(name => upsertChart(nodeId, name, from, to, latest[name])));
+}
+
+function cssId(s) { return s.replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+async function upsertChart(nodeId, name, from, to, latestPoint) {
+  let points;
+  try {
+    points = await api(
+      `/api/v1/metrics/timeseries?nodeId=${encodeURIComponent(nodeId)}` +
+      `&name=${encodeURIComponent(name)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
+      `&bucketSeconds=${nm.bucketSeconds}`
+    );
+  } catch (e) {
+    console.error('timeseries error for', name, e);
+    return;
+  }
+
+  const labels = points.map(p => formatTimeLabel(new Date(p.timestamp), nm.windowSeconds));
+  const tooltips = points.map(p => new Date(p.timestamp).toLocaleString());
+  const avg = points.map(p => p.avg);
+  const min = points.map(p => p.min);
+  const max = points.map(p => p.max);
+  const lastVal = latestPoint != null ? Number(latestPoint.value).toFixed(3) : '—';
+  const unit = latestPoint && latestPoint.unit ? latestPoint.unit : '';
+
+  let card = document.getElementById('chart-card-' + cssId(name));
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'chart-card';
+    card.id = 'chart-card-' + cssId(name);
+    const safeLabel = escapeHtml(metricLabel(name));
+    const safeNameRaw = escapeHtml(name);
+    card.innerHTML = `
+      <div class="chart-head">
+        <div>
+          <h3>${safeLabel}</h3>
+          <div class="sub">${safeNameRaw} · последнее: <b id="last-${cssId(name)}">${lastVal}</b> ${escapeHtml(unit)} · точек: <span id="cnt-${cssId(name)}">${points.length}</span></div>
+        </div>
+        <button class="analyze-btn" onclick="openAnalysisModal('${name.replace(/'/g, "\\'")}')">Анализ корреляции</button>
+      </div>
+      <div class="canvas-wrap"><canvas id="canvas-${cssId(name)}"></canvas></div>
+    `;
+    document.getElementById('nmCharts').appendChild(card);
+  } else {
+    document.getElementById('last-' + cssId(name)).textContent = lastVal;
+    document.getElementById('cnt-' + cssId(name)).textContent = points.length;
+  }
+
+  const ctx = document.getElementById('canvas-' + cssId(name));
+  if (nm.charts[name]) {
+    const c = nm.charts[name];
+    const pr = points.length <= 20 ? 3 : (points.length <= 60 ? 2 : 0);
+    c.data.labels = labels;
+    c._tooltipLabels = tooltips;
+    c.data.datasets[0].data = avg; c.data.datasets[0].pointRadius = pr;
+    c.data.datasets[1].data = min; c.data.datasets[1].pointRadius = pr;
+    c.data.datasets[2].data = max; c.data.datasets[2].pointRadius = pr;
+    c.update('none');
+  } else {
+    // динамические радиусы: при <=20 точек показываем точки явно,
+    // на больших окнах — только линию
+    const pr = points.length <= 20 ? 3 : (points.length <= 60 ? 2 : 0);
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'avg', data: avg, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.15)',
+            borderWidth: 2, pointRadius: pr, pointHoverRadius: 5, pointBackgroundColor: '#3b82f6',
+            tension: .25, fill: true, spanGaps: true },
+          { label: 'min', data: min, borderColor: '#22c55e',
+            borderWidth: 1, pointRadius: pr, pointHoverRadius: 4, pointBackgroundColor: '#22c55e',
+            tension: .25, spanGaps: true },
+          { label: 'max', data: max, borderColor: '#ef4444',
+            borderWidth: 1, pointRadius: pr, pointHoverRadius: 4, pointBackgroundColor: '#ef4444',
+            tension: .25, spanGaps: true },
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#cbd5e1', font: { size: 11 } } },
+          tooltip: {
+            callbacks: {
+              title: items => {
+                if (!items.length) return '';
+                const ch = items[0].chart;
+                return (ch._tooltipLabels && ch._tooltipLabels[items[0].dataIndex]) || items[0].label;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, maxTicksLimit: 6 },
+            grid:  { color: '#1e293b' }
+          },
+          y: {
+            ticks: { color: '#94a3b8' },
+            grid:  { color: '#1e293b' }
+          }
+        }
+      }
+    });
+    chart._tooltipLabels = tooltips;
+    nm.charts[name] = chart;
+  }
+}
+
+// Короткая метка для оси X в зависимости от размера окна
+function formatTimeLabel(d, windowSeconds) {
+  const pad = n => String(n).padStart(2, '0');
+  if (windowSeconds <= 3600) {
+    // <=1ч → HH:MM:SS
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } else if (windowSeconds <= 86400) {
+    // <=24ч → HH:MM
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } else {
+    // больше суток → DD.MM HH:MM
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+}
+
+async function deleteCurrentNode() {
+  if (!nm.node) return;
+  if (!confirm(`Удалить узел "${nm.node.name}"? Все его метрики будут удалены, активные алерты — разрешены.`)) return;
+  try {
+    await api('/api/v1/nodes/' + nm.node.id, { method: 'DELETE' });
+    closeNodeModal();
+    refresh();
+  } catch (e) {
+    alert('Не удалось удалить: ' + e.message);
+  }
+}
+
+// ============================================================
+// Analysis modal — корреляционный анализ причин
+// ============================================================
+
+async function openAnalysisModal(metricName) {
+  if (!nm.node) return;
+  const modal = document.getElementById('analysisModal');
+  modal.classList.add('open');
+  document.getElementById('anLoading').style.display = 'block';
+  document.getElementById('anContent').style.display = 'none';
+  document.getElementById('anMeta').textContent =
+    `узел ${nm.node.name} · метрика ${metricName} · окно ${nm.windowSeconds} сек`;
+
+  try {
+    const data = await api(
+      `/api/v1/metrics/analyze?nodeId=${encodeURIComponent(nm.node.id)}` +
+      `&name=${encodeURIComponent(metricName)}` +
+      `&windowSeconds=${nm.windowSeconds}` +
+      `&bucketSeconds=${Math.max(10, Math.floor(nm.windowSeconds / 60))}` +
+      `&topN=8`
+    );
+    renderAnalysis(data);
+  } catch (e) {
+    document.getElementById('anLoading').textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+function closeAnalysisModal() {
+  document.getElementById('analysisModal').classList.remove('open');
+}
+
+function renderAnalysis(data) {
+  document.getElementById('anLoading').style.display = 'none';
+  document.getElementById('anContent').style.display = 'block';
+
+  const t = data.target || {};
+  const card = document.getElementById('anTargetCard');
+  card.classList.toggle('anomaly', !!t.anomaly);
+
+  document.getElementById('anTargetName').textContent = metricLabel(t.name) || '—';
+
+  const badges = [];
+  if (t.anomaly) badges.push('<span class="badge anom">АНОМАЛИЯ</span>');
+  else           badges.push('<span class="badge norm">НОРМА</span>');
+  if (t.trend === 'RISING')  badges.push('<span class="badge rising">РОСТ</span>');
+  if (t.trend === 'FALLING') badges.push('<span class="badge falling">ПАДЕНИЕ</span>');
+  if (t.trend === 'STABLE')  badges.push('<span class="badge stable">СТАБИЛЬНО</span>');
+  document.getElementById('anTargetBadges').innerHTML = badges.join(' ');
+
+  document.getElementById('anCurrent').textContent = fmtNum(t.currentValue);
+  document.getElementById('anMean').textContent    = fmtNum(t.mean);
+  document.getElementById('anStddev').textContent  = fmtNum(t.stddev);
+  document.getElementById('anZ').textContent       = fmtNum(t.zScore);
+  const sign = t.changePercent > 0 ? '+' : '';
+  document.getElementById('anChange').textContent  = sign + fmtNum(t.changePercent) + ' %';
+  document.getElementById('anSamples').textContent = t.sampleCount;
+
+  document.getElementById('anSummary').textContent = data.summary || '—';
+
+  const corrs = data.correlations || [];
+  const list = document.getElementById('anCorrelations');
+  const empty = document.getElementById('anEmptyCorrs');
+  list.innerHTML = '';
+
+  if (corrs.length === 0) {
+    empty.style.display = 'block';
+  } else {
+    empty.style.display = 'none';
+    corrs.forEach(c => {
+      const absR = Math.abs(c.correlation);
+      const widthPct = Math.round(absR * 100);
+      const dirClass = c.correlation >= 0 ? 'pos' : 'neg';
+      const dirText  = c.correlation >= 0 ? 'синхронный рост/падение' : 'обратное движение';
+      const changeSign = c.changePercent > 0 ? '+' : '';
+      const row = document.createElement('div');
+      row.className = 'corr-row';
+      row.innerHTML = `
+        <div class="top">
+          <div class="name">${escapeHtml(metricLabel(c.name))}</div>
+          <div style="font-size:10px;color:#64748b;">${escapeHtml(c.name)}</div>
+          <div class="badges">
+            <span class="badge strength-${c.strength}">${c.strength}</span>
+            <span style="font-family: monospace; font-size: 13px; color:#cbd5e1;">r = ${fmtNum(c.correlation, 3)}</span>
+          </div>
+        </div>
+        <div class="bar-wrap"><div class="bar ${dirClass}" style="width: ${widthPct}%"></div></div>
+        <div class="details">
+          ${dirText} · текущее: ${fmtNum(c.currentValue)} · среднее: ${fmtNum(c.mean)} · изменение: ${changeSign}${fmtNum(c.changePercent)}%
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  }
+}
+
+function fmtNum(v, decimals = 2) {
+  if (v == null || isNaN(v)) return '—';
+  return Number(v).toFixed(decimals);
+}
+
+// Esc closes modals (analysis first, then node)
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('analysisModal').classList.contains('open')) {
+      closeAnalysisModal();
+    } else if (document.getElementById('nodeModal').classList.contains('open')) {
+      closeNodeModal();
+    }
+  }
+});
+
+// При загрузке: если есть токен — показать дашборд, иначе — экран логина
+if (getToken()) {
+  showApp();
+} else {
+  showAuth();
+}
+
+// Enter в полях логина запускает вход
+['authUsername', 'authPassword'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doLogin();
+  });
+});
+</script>
+</body>
+</html>

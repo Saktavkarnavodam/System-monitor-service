@@ -1,0 +1,44 @@
+# --- Build output ---
+target/
+*.jar
+*.war
+*.class
+
+# --- IDE ---
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Локальная БД H2 (файлы создаются при запуске) ---
+data/
+*.mv.db
+*.trace.db
+*.lock.db
+
+# --- Конфиги Claude и локальные настройки ---
+.claude/
+.cursor/
+
+# --- Локальные/секретные файлы ---
+*.local
+.env
+.env.local
+application-local.yml
+application-prod.yml
+
+# --- Зависимости Python агента ---
+agent/__pycache__/
+agent/*.pyc
+agent/.venv/
+agent/venv/
