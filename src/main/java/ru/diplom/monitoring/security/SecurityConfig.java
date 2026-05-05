@@ -42,7 +42,10 @@ public class SecurityConfig {
                                 "/api/v1/auth/register", "/api/v1/auth/login",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
                                 "/actuator/health", "/actuator/info",
-                                "/h2-console/**"
+                                "/h2-console/**",
+                                // /install/agent.{py,ps1,sh} — раздача скриптов
+                                // агентов; авторизуется уже сам агент по токену
+                                "/install/**"
                         ).permitAll()
                         // всё остальное — только авторизованным
                         .anyRequest().authenticated()

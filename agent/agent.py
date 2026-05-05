@@ -1,12 +1,15 @@
-я#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Агент мониторинга — собирает реальные метрики машины и шлёт в сервер.
 
 Требования:
-    pip install psutil requests
+    pip install psutil
 
-Использование:
-    python agent.py --server http://localhost:8080 --username admin --password admin123 --node-name "my-server"
+Использование (рекомендованный путь — agent-токен):
+    python agent.py --server http://localhost:8080 --token agt_xxx --node-name my-laptop
+
+Старый путь (логин/пароль) — оставлен для обратной совместимости:
+    python agent.py --server http://localhost:8080 --username admin --password admin123 --node-name my-server
 
 Что собирает:
     cpu.usage          — загрузка CPU в %
@@ -59,6 +62,7 @@ def http_get(url, token=None):
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
 def login(server, username, password):
+    """Старый путь: логин/пароль -> JWT. Используется только если --token не передан."""
     print(f"  Вход как {username}...", end=' ')
     try:
         res = http_post(f'{server}/api/v1/auth/login',
@@ -149,8 +153,9 @@ def collect_metrics():
 def main():
     p = argparse.ArgumentParser(description='Агент мониторинга для distributed-monitoring')
     p.add_argument('--server',    default='http://localhost:8080', help='URL сервера мониторинга')
-    p.add_argument('--username',  default='admin',                 help='Имя пользователя')
-    p.add_argument('--password',  default='admin123',              help='Пароль')
+    p.add_argument('--token',     default=None,                    help='Agent-токен (рекомендуется). Если задан, --username/--password игнорируются.')
+    p.add_argument('--username',  default=None,                    help='Имя пользователя (только если --token не задан)')
+    p.add_argument('--password',  default=None,                    help='Пароль (только если --token не задан)')
     p.add_argument('--node-name', default=None,                    help='Имя узла (по умолчанию — hostname)')
     p.add_argument('--host',      default=None,                    help='Адрес этой машины (как её видит сервер)')
     p.add_argument('--port',      type=int, default=0,             help='Порт этой машины (необязательно)')
@@ -168,7 +173,21 @@ def main():
     print(f"  Интервал: {args.interval} сек")
     print()
 
-    token = login(args.server, args.username, args.password)
+    # === Аутентификация ==========================================
+    # Приоритет: agent-токен > username/password
+    if args.token:
+        if not args.token.startswith('agt_'):
+            print("WARN: --token обычно начинается с 'agt_'. Возможно, вы передали JWT?")
+        token = args.token
+        token_kind = 'agent-token'
+    elif args.username and args.password:
+        token = login(args.server, args.username, args.password)
+        token_kind = 'jwt'
+    else:
+        print("ERROR: Нужен либо --token, либо --username + --password")
+        sys.exit(2)
+    print(f"  Аутентификация: {token_kind}\n")
+
     node_id = get_or_register_node(args.server, token, node_name, host, args.port)
 
     print(f"\nСбор метрик запущен. Ctrl+C для остановки.\n")
@@ -191,12 +210,14 @@ def main():
             break
         except Exception as e:
             print(f"  [ERR] {e}", flush=True)
-            # Попытка обновить токен при 401
-            if '401' in str(e):
+            # Если использовали логин/пароль и поймали 401 — обновляем JWT
+            if token_kind == 'jwt' and '401' in str(e):
                 try:
                     token = login(args.server, args.username, args.password)
                 except Exception:
                     pass
+            # Agent-токен сам не обновляется — если 401, значит, он отозван;
+            # перезапускать перевыпуск нечем, продолжаем попытки
 
         time.sleep(max(0, args.interval - 1))  # -1 т.к. cpu_percent(interval=1) ждёт 1 сек
 

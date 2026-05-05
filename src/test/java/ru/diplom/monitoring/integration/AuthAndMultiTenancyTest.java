@@ -21,6 +21,7 @@ import ru.diplom.monitoring.repository.UserRepository;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -209,6 +210,28 @@ class AuthAndMultiTenancyTest {
         // 7) JWT при этом продолжает работать
         mvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + jwt))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void installEndpoints_servePythonPowershellAndBashWithoutAuth() throws Exception {
+        // /install/agent.py — публичный, отдаёт код Python-агента
+        mvc.perform(get("/install/agent.py"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("text/x-python"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("def collect_metrics")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("--token")));
+
+        // /install/agent.ps1 — PowerShell
+        mvc.perform(get("/install/agent.ps1"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Get-Metrics")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Token")));
+
+        // /install/agent.sh — Bash
+        mvc.perform(get("/install/agent.sh"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("collect_metrics")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("--token")));
     }
 
     @Test

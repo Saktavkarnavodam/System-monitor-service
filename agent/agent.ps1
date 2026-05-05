@@ -1,14 +1,17 @@
 # Monitoring agent for Windows (PowerShell)
 # Collects real machine metrics and sends to the monitoring server.
 #
-# Usage:
-#   .\agent.ps1
+# Recommended usage (agent token):
+#   .\agent.ps1 -Server "http://my-server:8080" -Token "agt_xxx" -NodeName "web-01"
+#
+# Legacy usage (username/password — kept for backward compatibility):
 #   .\agent.ps1 -Server "http://my-server:8080" -Username "alice" -Password "secret" -NodeName "web-01"
 
 param(
     [string]$Server   = "http://localhost:8080",
-    [string]$Username = "admin",
-    [string]$Password = "admin123",
+    [string]$Token    = "",
+    [string]$Username = "",
+    [string]$Password = "",
     [string]$NodeName = $env:COMPUTERNAME,
     [string]$HostAddr = $env:COMPUTERNAME,
     [int]   $Port     = 0,
@@ -147,7 +150,23 @@ Write-Host "  Node:     $NodeName ($HostAddr)"
 Write-Host "  Interval: $Interval sec"
 Write-Host ""
 
-$token  = Get-AuthToken
+# Auth: prefer agent token over username/password
+if ($Token) {
+    if (-not $Token.StartsWith("agt_")) {
+        Write-Host "WARN: -Token usually starts with 'agt_'. Did you pass a JWT?"
+    }
+    $token = $Token
+    $tokenKind = "agent-token"
+} elseif ($Username -and $Password) {
+    $token = Get-AuthToken
+    $tokenKind = "jwt"
+} else {
+    Write-Host "ERROR: provide either -Token, or -Username + -Password"
+    exit 2
+}
+Write-Host "  Auth: $tokenKind"
+Write-Host ""
+
 $nodeId = Get-OrRegisterNode -Token $token
 
 Write-Host ""
@@ -168,8 +187,8 @@ while ($true) {
 
     } catch {
         Write-Host "  [ERR] $_"
-        # Try to refresh token on auth error
-        if ($_ -match "401|403|Unauthorized") {
+        # Refresh JWT on auth error (only if we logged in via username/password)
+        if ($tokenKind -eq "jwt" -and $_ -match "401|403|Unauthorized") {
             try { $token = Get-AuthToken } catch {}
         }
     }

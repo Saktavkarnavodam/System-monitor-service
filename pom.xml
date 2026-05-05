@@ -100,6 +100,24 @@
 
     <build>
         <finalName>distributed-monitoring</finalName>
+        <resources>
+            <!-- Стандартные ресурсы Spring Boot -->
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Агенты — единый источник правды в /agent, при сборке кладём
+                 их в classpath под /agent-installers/ для раздачи через
+                 эндпоинты /install/agent.{py,ps1,sh}. -->
+            <resource>
+                <directory>agent</directory>
+                <targetPath>agent-installers</targetPath>
+                <includes>
+                    <include>agent.py</include>
+                    <include>agent.ps1</include>
+                    <include>agent.sh</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

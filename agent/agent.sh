@@ -4,17 +4,20 @@
 #
 # Требования: curl, bc (обычно предустановлены)
 #
-# Использование:
+# Использование (рекомендованный путь — agent-токен):
 #   chmod +x agent.sh
-#   ./agent.sh
+#   ./agent.sh --server http://my-server:8080 --token agt_xxx --node-name web-01
+#
+# Старый путь (логин/пароль) — оставлен для обратной совместимости:
 #   ./agent.sh --server http://my-server:8080 --username alice --password secret --node-name web-01
 
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 SERVER="http://localhost:8080"
-USERNAME="admin"
-PASSWORD="admin123"
+TOKEN_ARG=""
+USERNAME=""
+PASSWORD=""
 NODE_NAME="$(hostname)"
 HOST_ADDR="$(hostname)"
 PORT=0
@@ -23,6 +26,7 @@ INTERVAL=10
 while [[ $# -gt 0 ]]; do
   case $1 in
     --server)    SERVER="$2";    shift 2 ;;
+    --token)     TOKEN_ARG="$2"; shift 2 ;;
     --username)  USERNAME="$2";  shift 2 ;;
     --password)  PASSWORD="$2";  shift 2 ;;
     --node-name) NODE_NAME="$2"; shift 2 ;;
@@ -34,6 +38,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 TOKEN=""
+TOKEN_KIND=""
 NODE_ID=""
 
 # ── HTTP helpers ──────────────────────────────────────────────────────────────
@@ -166,7 +171,21 @@ echo "  Узел:     $NODE_NAME ($HOST_ADDR)"
 echo "  Интервал: $INTERVAL сек"
 echo ""
 
-login
+if [[ -n "$TOKEN_ARG" ]]; then
+  if [[ "$TOKEN_ARG" != agt_* ]]; then
+    echo "WARN: --token обычно начинается с 'agt_'. Возможно, передан JWT?"
+  fi
+  TOKEN="$TOKEN_ARG"
+  TOKEN_KIND="agent-token"
+  echo "  Аутентификация: agent-token"
+elif [[ -n "$USERNAME" && -n "$PASSWORD" ]]; then
+  login
+  TOKEN_KIND="jwt"
+else
+  echo "ERROR: Нужен либо --token, либо --username + --password"
+  exit 2
+fi
+
 register_node
 
 echo ""
