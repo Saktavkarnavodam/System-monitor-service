@@ -3,153 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <title>Монитор распределённой системы</title>
+<link rel="stylesheet" href="/styles.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-  header { padding: 18px 24px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  header .links a { color: #60a5fa; margin-left: 14px; text-decoration: none; font-size: 13px; }
-  header .user { font-size: 13px; color: #94a3b8; }
-  header .user b { color: #f8fafc; }
-  header button { background: #334155; color: #e2e8f0; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; margin-left: 8px; }
-  header button:hover { background: #475569; }
-  main { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-  .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
-  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin: 0 0 12px 0; }
-  .big { font-size: 32px; font-weight: 600; color: #f8fafc; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #334155; }
-  th { color: #94a3b8; font-weight: 500; }
-  tr.clickable { cursor: pointer; }
-  tr.clickable:hover td { background: #273449; }
-  .status-HEALTHY { color: #22c55e; }
-  .status-DEGRADED { color: #eab308; }
-  .status-UNHEALTHY { color: #ef4444; }
-  .status-UNKNOWN { color: #94a3b8; }
-  .sev-INFO { color: #60a5fa; }
-  .sev-WARNING { color: #eab308; }
-  .sev-CRITICAL { color: #ef4444; }
-  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .muted { color: #94a3b8; font-size: 12px; }
-  #updated { font-size: 12px; color: #94a3b8; }
-
-  /* Auth screen */
-  .auth-overlay { position: fixed; inset: 0; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 100; }
-  .auth-box { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 28px; width: 360px; }
-  .auth-box h2 { margin: 0 0 18px 0; font-size: 18px; }
-  .auth-box label { display: block; font-size: 12px; color: #94a3b8; margin: 12px 0 4px; }
-  .auth-box input { width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px; }
-  .auth-box .btn-row { display: flex; gap: 8px; margin-top: 18px; }
-  .auth-box button { flex: 1; padding: 10px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
-  .auth-box button.primary { background: #3b82f6; color: white; }
-  .auth-box button.primary:hover { background: #2563eb; }
-  .auth-box button.secondary { background: #334155; color: #e2e8f0; }
-  .auth-box button.secondary:hover { background: #475569; }
-  .auth-box .err { color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px; }
-  .auth-box .hint { font-size: 11px; color: #64748b; margin-top: 14px; line-height: 1.5; }
-
-  /* Node detail modal */
-  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; z-index: 50; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32px 16px; }
-  .modal-backdrop.open { display: flex; }
-  .modal { background: #0f172a; border: 1px solid #334155; border-radius: 8px; width: 100%; max-width: 1100px; padding: 20px 22px; }
-  .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 14px; }
-  .modal-head h2 { margin: 0; font-size: 20px; }
-  .modal-head .meta { color: #94a3b8; font-size: 12px; margin-top: 4px; }
-  .modal-head .close { background: #334155; color: #e2e8f0; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-  .modal-head .close:hover { background: #475569; }
-  .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
-  .controls .label { color: #94a3b8; font-size: 12px; }
-  .controls button { background: #334155; color: #e2e8f0; border: 1px solid #475569; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-  .controls button.active { background: #3b82f6; border-color: #3b82f6; }
-  .controls button:hover:not(.active) { background: #475569; }
-  .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
-  .chart-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px; }
-  .chart-card h3 { margin: 0 0 4px 0; font-size: 14px; font-weight: 600; }
-  .chart-card .sub { color: #94a3b8; font-size: 11px; margin-bottom: 8px; }
-  .chart-card .canvas-wrap { position: relative; height: 200px; }
-  .empty-charts { color: #94a3b8; font-size: 13px; padding: 20px 0; text-align: center; }
-  .danger-row { display: flex; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid #334155; }
-  .danger-row button { background: #7f1d1d; color: #fee2e2; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-  .danger-row button:hover { background: #991b1b; }
-
-  /* Analyze button on chart card */
-  .chart-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  .chart-head .analyze-btn { background: #1e3a8a; color: #dbeafe; border: 1px solid #3b82f6; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; white-space: nowrap; }
-  .chart-head .analyze-btn:hover { background: #1d4ed8; }
-
-  /* Analysis modal */
-  .analysis-modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; z-index: 200; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32px 16px; }
-  .analysis-modal.open { display: flex; }
-  .analysis-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; width: 100%; max-width: 760px; padding: 22px; }
-  .analysis-box h2 { margin: 0 0 6px 0; font-size: 18px; }
-  .analysis-box .meta { color: #94a3b8; font-size: 12px; margin-bottom: 18px; }
-  .analysis-box .target-card { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 14px; margin-bottom: 18px; }
-  .analysis-box .target-card.anomaly { border-color: #ef4444; background: #2a1414; }
-  .analysis-box .target-card .row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 10px; }
-  .analysis-box .target-card .stat { font-size: 11px; color: #94a3b8; }
-  .analysis-box .target-card .stat b { display: block; color: #f8fafc; font-size: 18px; margin-top: 2px; font-weight: 600; }
-  .analysis-box .badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; }
-  .badge.anom { background: #7f1d1d; color: #fee2e2; }
-  .badge.norm { background: #14532d; color: #d1fae5; }
-  .badge.rising { background: #7c2d12; color: #fed7aa; }
-  .badge.falling { background: #134e4a; color: #ccfbf1; }
-  .badge.stable { background: #334155; color: #cbd5e1; }
-  .summary-box { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 14px; margin-bottom: 18px; line-height: 1.55; font-size: 13px; }
-  .summary-box .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
-  .corr-list { display: flex; flex-direction: column; gap: 8px; }
-  .corr-row { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 10px 14px; }
-  .corr-row .top { display: flex; justify-content: space-between; align-items: center; }
-  .corr-row .name { font-weight: 600; font-size: 13px; }
-  .corr-row .badges { display: flex; gap: 6px; align-items: center; }
-  .corr-row .bar-wrap { margin-top: 8px; height: 6px; background: #0f172a; border-radius: 3px; position: relative; }
-  .corr-row .bar { position: absolute; top: 0; height: 100%; border-radius: 3px; }
-  .corr-row .bar.pos { background: #3b82f6; }
-  .corr-row .bar.neg { background: #ef4444; }
-  .corr-row .details { color: #94a3b8; font-size: 11px; margin-top: 6px; }
-  .strength-STRONG { background: #1e40af; color: #dbeafe; }
-  .strength-MODERATE { background: #92400e; color: #fde68a; }
-  .strength-WEAK { background: #334155; color: #cbd5e1; }
-  .empty-corrs { color: #94a3b8; font-size: 12px; padding: 14px 0; text-align: center; }
-
-  /* Add-node wizard */
-  .primary-btn { background: #3b82f6; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
-  .primary-btn:hover { background: #2563eb; }
-  .secondary-btn { background: #334155; color: #e2e8f0; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-  .secondary-btn:hover { background: #475569; }
-  .danger-btn { background: #7f1d1d; color: #fee2e2; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-  .danger-btn:hover { background: #991b1b; }
-
-  .wiz-modal { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: none; z-index: 150; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32px 16px; }
-  .wiz-modal.open { display: flex; }
-  .wiz-box { background: #0f172a; border: 1px solid #334155; border-radius: 8px; width: 100%; max-width: 720px; padding: 24px; }
-  .wiz-box h2 { margin: 0 0 6px 0; font-size: 18px; }
-  .wiz-box .step-meta { color: #94a3b8; font-size: 12px; margin-bottom: 20px; }
-  .wiz-box label { display: block; font-size: 12px; color: #94a3b8; margin: 14px 0 4px; }
-  .wiz-box input[type="text"], .wiz-box input[type="number"] { width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px; }
-  .rule-row td { vertical-align: middle; }
-  .rule-row .rule-actions { display: flex; gap: 6px; justify-content: flex-end; }
-  .rule-row .rule-actions button { padding: 4px 10px; font-size: 11px; }
-  .rule-disabled { opacity: .55; }
-  .pill { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; background: #334155; color: #cbd5e1; font-family: monospace; }
-  .os-tabs { display: flex; gap: 4px; margin: 16px 0 12px; border-bottom: 1px solid #334155; }
-  .os-tab { padding: 8px 14px; cursor: pointer; color: #94a3b8; font-size: 13px; border-bottom: 2px solid transparent; }
-  .os-tab.active { color: #f8fafc; border-bottom-color: #3b82f6; }
-  .os-tab:hover:not(.active) { color: #cbd5e1; }
-  .install-cmd-box { background: #020617; border: 1px solid #334155; border-radius: 6px; padding: 14px; font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 12px; color: #e2e8f0; white-space: pre-wrap; word-break: break-all; line-height: 1.6; position: relative; max-height: 180px; overflow-y: auto; }
-  .copy-btn { position: absolute; top: 8px; right: 8px; background: #334155; color: #e2e8f0; border: none; padding: 4px 10px; border-radius: 3px; cursor: pointer; font-size: 11px; }
-  .copy-btn:hover { background: #475569; }
-  .copy-btn.copied { background: #14532d; color: #d1fae5; }
-  .token-once { background: #2a1414; border: 1px solid #ef4444; border-radius: 6px; padding: 12px 14px; margin: 12px 0; font-size: 12px; line-height: 1.5; }
-  .token-once code { background: #0f172a; padding: 4px 8px; border-radius: 3px; font-family: monospace; word-break: break-all; display: inline-block; margin-top: 6px; max-width: 100%; }
-
-  .token-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
-  .token-row { background: #1e293b; border: 1px solid #334155; border-radius: 4px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; }
-  .token-row.revoked { opacity: .55; }
-  .token-row .name { font-weight: 600; color: #f8fafc; }
-  .token-row .meta { color: #64748b; font-size: 11px; }
-  .token-row .suffix { font-family: monospace; color: #94a3b8; }
-</style>
 </head>
 <body>
 
@@ -162,7 +17,7 @@
     <label>Пароль</label>
     <input id="authPassword" type="password" autocomplete="current-password" />
     <div class="btn-row">
-      <button class="primary" onclick="doLogin()">Войти</button>
+      <button class="primary"   onclick="doLogin()">Войти</button>
       <button class="secondary" onclick="doRegister()">Регистрация</button>
     </div>
     <div class="err" id="authErr"></div>
@@ -184,9 +39,9 @@
   <div>
     <span id="updated"></span>
     <span class="links">
-      <a href="/swagger-ui.html" target="_blank">Swagger UI</a>
-      <a href="/v3/api-docs" target="_blank">OpenAPI JSON</a>
-      <a href="/actuator/health" target="_blank">Health</a>
+      <a href="/swagger-ui.html"  target="_blank">Swagger UI</a>
+      <a href="/v3/api-docs"      target="_blank">OpenAPI JSON</a>
+      <a href="/actuator/health"  target="_blank">Health</a>
     </span>
   </div>
 </header>
@@ -265,6 +120,7 @@
       <button data-window="3600"  class="active" onclick="setWindow(3600)">1 час</button>
       <button data-window="21600" onclick="setWindow(21600)">6 часов</button>
       <button data-window="86400" onclick="setWindow(86400)">24 часа</button>
+      <button onclick="toggleCustomRange()">Свой интервал…</button>
       <span class="label" style="margin-left: 16px;">Бакет:</span>
       <button data-bucket="10"  onclick="setBucket(10)">10с</button>
       <button data-bucket="60"  class="active" onclick="setBucket(60)">1м</button>
@@ -274,6 +130,14 @@
           <input type="checkbox" id="nmAutoRefresh" checked /> авто-обновление 5с
         </label>
       </span>
+    </div>
+
+    <div id="nmCustomRange" class="controls" style="display:none; gap: 8px; padding: 10px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; margin-bottom: 12px;">
+      <span class="label">от:</span>
+      <input type="datetime-local" id="nmCustomFrom" />
+      <span class="label">до:</span>
+      <input type="datetime-local" id="nmCustomTo" />
+      <button class="primary-btn" onclick="applyCustomRange()">Применить</button>
     </div>
 
     <div id="nmCharts" class="charts-grid"></div>
@@ -299,55 +163,50 @@
       <button class="secondary-btn" onclick="closeAddNodeWizard()">Закрыть</button>
     </div>
 
-    <!-- ШАГ 1: имя токена и OS -->
+    <!-- ШАГ 1: имя токена + ОС + имя узла -->
     <div id="wizStep1">
-      <label>Имя токена (как ты будешь его узнавать в списке)</label>
+      <label>Имя токена</label>
       <input type="text" id="wizTokenName" placeholder="например: production-fleet" maxlength="64" />
 
-      <label>Операционная система целевой машины</label>
+      <label>ОС целевой машины</label>
       <div class="os-tabs">
-        <div class="os-tab active" data-os="linux"   onclick="selectOs('linux')">Linux / macOS</div>
+        <div class="os-tab active" data-os="linux"   onclick="selectOs('linux')">Linux / macOS (Python)</div>
         <div class="os-tab"        data-os="windows" onclick="selectOs('windows')">Windows</div>
-        <div class="os-tab"        data-os="bash"    onclick="selectOs('bash')">Bash (минимум)</div>
+        <div class="os-tab"        data-os="bash"    onclick="selectOs('bash')">Linux (Bash)</div>
       </div>
 
-      <label>Имя узла, которое появится в списке (по умолчанию — hostname машины)</label>
-      <input type="text" id="wizNodeName" placeholder="можно оставить пустым" maxlength="64" />
+      <label>Имя узла (необязательно — по умолчанию hostname)</label>
+      <input type="text" id="wizNodeName" placeholder="" maxlength="64" />
 
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
         <button class="secondary-btn" onclick="closeAddNodeWizard()">Отмена</button>
-        <button class="primary-btn" onclick="wizGenerateToken()">Получить команду установки →</button>
+        <button class="primary-btn"   onclick="wizGenerateToken()">Получить команду →</button>
       </div>
     </div>
 
-    <!-- ШАГ 2: показ токена и установочной команды -->
+    <!-- ШАГ 2: токен + install-команда -->
     <div id="wizStep2" style="display:none;">
       <div class="token-once">
-        <b>Внимание:</b> токен показывается ровно один раз. Скопируй его сейчас — после закрытия окна сервер сможет
-        предоставить только хеш. Если потеряешь — выпустишь новый.
+        <b>Токен показывается один раз.</b> Скопируйте сейчас — потом сервер хранит только хеш.
         <code id="wizTokenValue">agt_…</code>
       </div>
 
-      <label>Шаг 1 из 2 — Запусти эту команду на целевой машине:</label>
+      <label>Запустите эту команду на целевой машине:</label>
       <div class="install-cmd-box" id="wizInstallCmd">
         <button class="copy-btn" onclick="copyInstallCmd(this)">Копировать</button>
         <span id="wizInstallCmdText"></span>
       </div>
 
-      <label style="margin-top: 18px;">Шаг 2 из 2 — Подожди ~10 сек и обнови страницу. Узел появится в списке.</label>
-      <div class="muted" style="font-size: 12px; line-height: 1.5;">
-        Агент авторизуется по токену, регистрирует узел сам, начинает слать метрики раз в 10 секунд.
-        Можно использовать один и тот же токен на нескольких машинах — каждая зарегистрируется отдельным узлом
-        по своему hostname.
+      <div class="muted" style="font-size: 12px; line-height: 1.5; margin-top: 10px;">
+        Через ~10 секунд узел появится в списке. Один токен можно использовать на нескольких машинах — каждая зарегистрируется отдельным узлом по своему hostname.
       </div>
 
       <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 22px;">
         <button class="secondary-btn" onclick="wizBack()">← Назад</button>
-        <button class="primary-btn" onclick="closeAddNodeWizard()">Готово</button>
+        <button class="primary-btn"   onclick="closeAddNodeWizard()">Готово</button>
       </div>
     </div>
 
-    <!-- Список существующих токенов -->
     <div id="wizTokenList" style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #334155;">
       <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;">
         Активные токены
@@ -377,19 +236,16 @@
 
     <label>Имя метрики</label>
     <input type="text" id="ruleMetricName" placeholder="cpu.usage" maxlength="128" />
-    <div class="muted" style="font-size: 11px; margin-top: 4px;">
-      Ровно как метрика приходит от агента. Подсказка по уже виденным метрикам — внизу формы.
-    </div>
 
-    <label>Узел (необязательно — пусто = ко всем своим узлам)</label>
-    <select id="ruleNodeId" style="width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px;">
+    <label>Узел (пусто — правило ко всем своим узлам)</label>
+    <select id="ruleNodeId">
       <option value="">— все узлы —</option>
     </select>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
       <div>
         <label>Условие</label>
-        <select id="ruleCondition" style="width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px;">
+        <select id="ruleCondition">
           <option value="GT">GT — больше</option>
           <option value="GTE">GTE — больше или равно</option>
           <option value="LT">LT — меньше</option>
@@ -408,13 +264,10 @@
       <div>
         <label>Длительность нарушения, сек</label>
         <input type="number" id="ruleDuration" min="1" value="30" />
-        <div class="muted" style="font-size: 11px; margin-top: 4px;">
-          Все точки в окне должны нарушать порог.
-        </div>
       </div>
       <div>
         <label>Severity</label>
-        <select id="ruleSeverity" style="width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px;">
+        <select id="ruleSeverity">
           <option value="INFO">INFO</option>
           <option value="WARNING" selected>WARNING</option>
           <option value="CRITICAL">CRITICAL</option>
@@ -430,14 +283,13 @@
     </label>
 
     <div id="ruleHint" class="muted" style="font-size: 11px; margin-top: 14px;"></div>
-
     <div id="ruleErr" style="color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px;"></div>
 
     <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 18px;">
       <button id="ruleDeleteBtn" class="danger-btn" style="display: none;" onclick="deleteRuleFromModal()">Удалить</button>
       <div style="margin-left: auto; display: flex; gap: 8px;">
         <button class="secondary-btn" onclick="closeRuleModal()">Отмена</button>
-        <button class="primary-btn" onclick="saveRule()">Сохранить</button>
+        <button class="primary-btn"   onclick="saveRule()">Сохранить</button>
       </div>
     </div>
   </div>
@@ -451,13 +303,12 @@
         <h2>Анализ причин изменения метрики</h2>
         <div class="meta" id="anMeta">—</div>
       </div>
-      <button class="close" style="background:#334155;color:#e2e8f0;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:13px;" onclick="closeAnalysisModal()">Закрыть</button>
+      <button class="secondary-btn" onclick="closeAnalysisModal()">Закрыть</button>
     </div>
 
     <div id="anLoading" style="text-align:center; color:#94a3b8; padding: 30px 0;">Считаем корреляции…</div>
 
     <div id="anContent" style="display:none">
-      <!-- Целевая метрика -->
       <div id="anTargetCard" class="target-card">
         <div style="display:flex; justify-content: space-between; align-items: center;">
           <div style="font-weight:600; font-size:15px;" id="anTargetName">—</div>
@@ -475,13 +326,11 @@
         </div>
       </div>
 
-      <!-- Текстовое резюме -->
       <div class="summary-box">
         <div class="label">Автоматическое резюме</div>
         <div id="anSummary">—</div>
       </div>
 
-      <!-- Список коррелирующих метрик -->
       <div class="label" style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px;">
         Топ коррелирующих метрик (вероятные сопутствующие факторы)
       </div>
@@ -493,894 +342,13 @@
   </div>
 </div>
 
-<script>
-const TOKEN_KEY = 'monitoring.jwt';
-const USER_KEY  = 'monitoring.user';
-const fmt = (iso) => iso ? new Date(iso).toLocaleString() : '—';
-
-// Словарь человекочитаемых названий метрик
-const METRIC_LABELS = {
-  'cpu.usage':           'CPU — загрузка (%)',
-  'cpu.count_logical':   'CPU — количество ядер',
-  'memory.used_mb':      'Память — занято (МБ)',
-  'memory.total_mb':     'Память — всего (МБ)',
-  'memory.percent':      'Память — загрузка (%)',
-  'disk.used_gb':        'Диск — занято (ГБ)',
-  'disk.total_gb':       'Диск — всего (ГБ)',
-  'disk.percent':        'Диск — заполненность (%)',
-  'net.bytes_sent_ps':   'Сеть — отправка (байт/с)',
-  'net.bytes_recv_ps':   'Сеть — приём (байт/с)',
-  'process.count':       'Процессы — количество',
-};
-
-// Возвращает читаемое название метрики, если есть в словаре, иначе — оригинал
-function metricLabel(name) {
-  return METRIC_LABELS[name] || name;
-}
-
-function getToken() { return localStorage.getItem(TOKEN_KEY); }
-function setSession(resp) {
-  localStorage.setItem(TOKEN_KEY, resp.token);
-  localStorage.setItem(USER_KEY, JSON.stringify({ id: resp.userId, username: resp.username, role: resp.role }));
-}
-function clearSession() {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-}
-
-async function api(path, opts = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
-  const token = getToken();
-  if (token) headers['Authorization'] = 'Bearer ' + token;
-  const res = await fetch(path, { ...opts, headers });
-  if (res.status === 401 || res.status === 403) {
-    clearSession();
-    showAuth();
-    throw new Error('Не авторизован');
-  }
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.message || ('HTTP ' + res.status));
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
-
-async function doLogin() {
-  const username = document.getElementById('authUsername').value.trim();
-  const password = document.getElementById('authPassword').value;
-  if (!username || !password) { document.getElementById('authErr').textContent = 'Введите имя пользователя и пароль'; return; }
-  try {
-    const res = await fetch('/api/v1/auth/login', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Ошибка входа');
-    }
-    const data = await res.json();
-    setSession(data);
-    showApp();
-  } catch (e) {
-    document.getElementById('authErr').textContent = e.message;
-  }
-}
-
-async function doRegister() {
-  const username = document.getElementById('authUsername').value.trim();
-  const password = document.getElementById('authPassword').value;
-  if (!username || password.length < 6) {
-    document.getElementById('authErr').textContent = 'Имя >= 3 символов, пароль >= 6 символов';
-    return;
-  }
-  try {
-    const res = await fetch('/api/v1/auth/register', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.message || 'Ошибка регистрации');
-    }
-    const data = await res.json();
-    setSession(data);
-    showApp();
-  } catch (e) {
-    document.getElementById('authErr').textContent = e.message;
-  }
-}
-
-function logout() {
-  clearSession();
-  showAuth();
-}
-
-function showAuth() {
-  document.getElementById('authOverlay').style.display = 'flex';
-  document.getElementById('appUI').style.display = 'none';
-  document.getElementById('authErr').textContent = '';
-}
-
-function showApp() {
-  document.getElementById('authOverlay').style.display = 'none';
-  document.getElementById('appUI').style.display = 'block';
-  const user = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
-  document.getElementById('currentUser').textContent = user.username || '?';
-  document.getElementById('currentRole').textContent = user.role === 'ADMIN' ? '(admin)' : '';
-  refresh();
-  if (window._refreshInterval) clearInterval(window._refreshInterval);
-  window._refreshInterval = setInterval(refresh, 5000);
-}
-
-async function refresh() {
-  try {
-    const d = await api('/api/v1/dashboard/overview');
-
-    document.getElementById('totalNodes').textContent = d.totalNodes;
-    document.getElementById('activeAlerts').textContent = d.activeAlerts;
-    document.getElementById('storedMetrics').textContent = d.totalMetricsStored;
-    document.getElementById('genAt').textContent = fmt(d.generatedAt);
-    document.getElementById('updated').textContent = 'Обновлено: ' + fmt(d.generatedAt);
-
-    const nsg = document.getElementById('nodeStatusGrid');
-    nsg.innerHTML = '';
-    Object.entries(d.nodeStatusCounts || {}).forEach(([k,v]) => {
-      nsg.insertAdjacentHTML('beforeend', `<div><div class="muted">${k}</div><div class="status-${k}" style="font-size:20px">${v}</div></div>`);
-    });
-
-    const asg = document.getElementById('alertSevGrid');
-    asg.innerHTML = '';
-    Object.entries(d.alertSeverityCounts || {}).forEach(([k,v]) => {
-      asg.insertAdjacentHTML('beforeend', `<div><div class="muted">${k}</div><div class="sev-${k}" style="font-size:20px">${v}</div></div>`);
-    });
-
-    const tb = document.getElementById('nodesTbody');
-    tb.innerHTML = '';
-    (d.nodes || []).forEach(n => {
-      const tr = document.createElement('tr');
-      tr.className = 'clickable';
-      tr.onclick = () => openNodeModal(n);
-      tr.innerHTML =
-        `<td>${escapeHtml(n.name)}</td><td>${escapeHtml(n.type || '')}</td><td>${escapeHtml((n.host||'') + (n.port ? ':' + n.port : ''))}</td>
-         <td class="status-${n.status}">${n.status}</td><td>${fmt(n.lastHeartbeat)}</td><td class="muted">${n.id}</td>`;
-      tb.appendChild(tr);
-    });
-
-    const ab = document.getElementById('alertsTbody');
-    ab.innerHTML = '';
-    (d.recentAlerts || []).forEach(a => {
-      ab.insertAdjacentHTML('beforeend',
-        `<tr><td>${fmt(a.firedAt)}</td><td>${escapeHtml(a.ruleName || '')}</td><td>${escapeHtml(a.metricName)}</td>
-         <td>${a.value != null ? a.value.toFixed(3) : ''}</td>
-         <td class="sev-${a.severity}">${a.severity}</td>
-         <td>${a.status}</td></tr>`);
-    });
-
-    // Правила алертов — отдельный запрос (нет в overview)
-    refreshRules(d.nodes || []);
-  } catch (e) {
-    console.error(e);
-  }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-// ============================================================
-// Node detail modal
-// ============================================================
-
-let nm = {
-  node: null,
-  windowSeconds: 3600,
-  bucketSeconds: 60,
-  charts: {},          // metricName -> Chart.js instance
-  refreshTimer: null,
-};
-
-function openNodeModal(node) {
-  nm.node = node;
-  document.getElementById('nmName').textContent = node.name;
-  document.getElementById('nmMeta').innerHTML = [
-    `${escapeHtml(node.type || 'service')}`,
-    `${escapeHtml((node.host || '—') + (node.port ? ':' + node.port : ''))}`,
-    `<span class="status-${node.status}">${node.status}</span>`,
-    `heartbeat: ${fmt(node.lastHeartbeat)}`,
-    `id: <span class="muted">${node.id}</span>`
-  ].join(' · ');
-  document.getElementById('nodeModal').classList.add('open');
-
-  // reset charts (might have leftovers from previous open)
-  destroyCharts();
-  document.getElementById('nmCharts').innerHTML = '';
-  loadCharts();
-
-  if (nm.refreshTimer) clearInterval(nm.refreshTimer);
-  nm.refreshTimer = setInterval(() => {
-    if (document.getElementById('nmAutoRefresh').checked) loadCharts(true);
-  }, 5000);
-}
-
-function closeNodeModal() {
-  document.getElementById('nodeModal').classList.remove('open');
-  if (nm.refreshTimer) { clearInterval(nm.refreshTimer); nm.refreshTimer = null; }
-  destroyCharts();
-  nm.node = null;
-}
-
-function destroyCharts() {
-  Object.values(nm.charts).forEach(c => c.destroy());
-  nm.charts = {};
-}
-
-function setWindow(secs) {
-  nm.windowSeconds = secs;
-  document.querySelectorAll('.controls button[data-window]').forEach(b => {
-    b.classList.toggle('active', Number(b.dataset.window) === secs);
-  });
-  loadCharts();
-}
-
-function setBucket(secs) {
-  nm.bucketSeconds = secs;
-  document.querySelectorAll('.controls button[data-bucket]').forEach(b => {
-    b.classList.toggle('active', Number(b.dataset.bucket) === secs);
-  });
-  loadCharts();
-}
-
-async function loadCharts(incremental = false) {
-  if (!nm.node) return;
-  const nodeId = nm.node.id;
-
-  // 1) Получить список метрик узла (через latest) — endpoint возвращает массив Metric
-  let latestArr;
-  try {
-    latestArr = await api(`/api/v1/nodes/${nodeId}/metrics/latest`);
-  } catch (e) {
-    console.error(e);
-    return;
-  }
-
-  // строим словарь {имя_метрики -> объект Metric} из массива
-  const latest = {};
-  (latestArr || []).forEach(m => { if (m && m.name) latest[m.name] = m; });
-  const metricNames = Object.keys(latest).sort();
-  const wrap = document.getElementById('nmCharts');
-  const empty = document.getElementById('nmEmpty');
-
-  if (metricNames.length === 0) {
-    if (!incremental) {
-      destroyCharts();
-      wrap.innerHTML = '';
-      empty.style.display = 'block';
-    }
-    return;
-  }
-  empty.style.display = 'none';
-
-  // 2) Удалить чарты, которых больше нет в latest
-  Object.keys(nm.charts).forEach(name => {
-    if (!metricNames.includes(name)) {
-      nm.charts[name].destroy();
-      delete nm.charts[name];
-      const el = document.getElementById('chart-card-' + cssId(name));
-      if (el) el.remove();
-    }
-  });
-
-  // 3) Для каждой метрики — обновить или создать
-  const from = new Date(Date.now() - nm.windowSeconds * 1000).toISOString();
-  const to   = new Date().toISOString();
-
-  await Promise.all(metricNames.map(name => upsertChart(nodeId, name, from, to, latest[name])));
-}
-
-function cssId(s) { return s.replace(/[^a-zA-Z0-9_-]/g, '_'); }
-
-async function upsertChart(nodeId, name, from, to, latestPoint) {
-  let points;
-  try {
-    points = await api(
-      `/api/v1/metrics/timeseries?nodeId=${encodeURIComponent(nodeId)}` +
-      `&name=${encodeURIComponent(name)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` +
-      `&bucketSeconds=${nm.bucketSeconds}`
-    );
-  } catch (e) {
-    console.error('timeseries error for', name, e);
-    return;
-  }
-
-  const labels = points.map(p => formatTimeLabel(new Date(p.timestamp), nm.windowSeconds));
-  const tooltips = points.map(p => new Date(p.timestamp).toLocaleString());
-  const avg = points.map(p => p.avg);
-  const min = points.map(p => p.min);
-  const max = points.map(p => p.max);
-  const lastVal = latestPoint != null ? Number(latestPoint.value).toFixed(3) : '—';
-  const unit = latestPoint && latestPoint.unit ? latestPoint.unit : '';
-
-  let card = document.getElementById('chart-card-' + cssId(name));
-  if (!card) {
-    card = document.createElement('div');
-    card.className = 'chart-card';
-    card.id = 'chart-card-' + cssId(name);
-    const safeLabel = escapeHtml(metricLabel(name));
-    const safeNameRaw = escapeHtml(name);
-    card.innerHTML = `
-      <div class="chart-head">
-        <div>
-          <h3>${safeLabel}</h3>
-          <div class="sub">${safeNameRaw} · последнее: <b id="last-${cssId(name)}">${lastVal}</b> ${escapeHtml(unit)} · точек: <span id="cnt-${cssId(name)}">${points.length}</span></div>
-        </div>
-        <button class="analyze-btn" onclick="openAnalysisModal('${name.replace(/'/g, "\\'")}')">Анализ корреляции</button>
-      </div>
-      <div class="canvas-wrap"><canvas id="canvas-${cssId(name)}"></canvas></div>
-    `;
-    document.getElementById('nmCharts').appendChild(card);
-  } else {
-    document.getElementById('last-' + cssId(name)).textContent = lastVal;
-    document.getElementById('cnt-' + cssId(name)).textContent = points.length;
-  }
-
-  const ctx = document.getElementById('canvas-' + cssId(name));
-  if (nm.charts[name]) {
-    const c = nm.charts[name];
-    const pr = points.length <= 20 ? 3 : (points.length <= 60 ? 2 : 0);
-    c.data.labels = labels;
-    c._tooltipLabels = tooltips;
-    c.data.datasets[0].data = avg; c.data.datasets[0].pointRadius = pr;
-    c.data.datasets[1].data = min; c.data.datasets[1].pointRadius = pr;
-    c.data.datasets[2].data = max; c.data.datasets[2].pointRadius = pr;
-    c.update('none');
-  } else {
-    // динамические радиусы: при <=20 точек показываем точки явно,
-    // на больших окнах — только линию
-    const pr = points.length <= 20 ? 3 : (points.length <= 60 ? 2 : 0);
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: 'avg', data: avg, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,.15)',
-            borderWidth: 2, pointRadius: pr, pointHoverRadius: 5, pointBackgroundColor: '#3b82f6',
-            tension: .25, fill: true, spanGaps: true },
-          { label: 'min', data: min, borderColor: '#22c55e',
-            borderWidth: 1, pointRadius: pr, pointHoverRadius: 4, pointBackgroundColor: '#22c55e',
-            tension: .25, spanGaps: true },
-          { label: 'max', data: max, borderColor: '#ef4444',
-            borderWidth: 1, pointRadius: pr, pointHoverRadius: 4, pointBackgroundColor: '#ef4444',
-            tension: .25, spanGaps: true },
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { labels: { color: '#cbd5e1', font: { size: 11 } } },
-          tooltip: {
-            callbacks: {
-              title: items => {
-                if (!items.length) return '';
-                const ch = items[0].chart;
-                return (ch._tooltipLabels && ch._tooltipLabels[items[0].dataIndex]) || items[0].label;
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: { color: '#94a3b8', maxRotation: 0, autoSkip: true, maxTicksLimit: 6 },
-            grid:  { color: '#1e293b' }
-          },
-          y: {
-            ticks: { color: '#94a3b8' },
-            grid:  { color: '#1e293b' }
-          }
-        }
-      }
-    });
-    chart._tooltipLabels = tooltips;
-    nm.charts[name] = chart;
-  }
-}
-
-// Короткая метка для оси X в зависимости от размера окна
-function formatTimeLabel(d, windowSeconds) {
-  const pad = n => String(n).padStart(2, '0');
-  if (windowSeconds <= 3600) {
-    // <=1ч → HH:MM:SS
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  } else if (windowSeconds <= 86400) {
-    // <=24ч → HH:MM
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  } else {
-    // больше суток → DD.MM HH:MM
-    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-}
-
-async function deleteCurrentNode() {
-  if (!nm.node) return;
-  if (!confirm(`Удалить узел "${nm.node.name}"? Все его метрики будут удалены, активные алерты — разрешены.`)) return;
-  try {
-    await api('/api/v1/nodes/' + nm.node.id, { method: 'DELETE' });
-    closeNodeModal();
-    refresh();
-  } catch (e) {
-    alert('Не удалось удалить: ' + e.message);
-  }
-}
-
-// ============================================================
-// Analysis modal — корреляционный анализ причин
-// ============================================================
-
-async function openAnalysisModal(metricName) {
-  if (!nm.node) return;
-  const modal = document.getElementById('analysisModal');
-  modal.classList.add('open');
-  document.getElementById('anLoading').style.display = 'block';
-  document.getElementById('anContent').style.display = 'none';
-  document.getElementById('anMeta').textContent =
-    `узел ${nm.node.name} · метрика ${metricName} · окно ${nm.windowSeconds} сек`;
-
-  try {
-    const data = await api(
-      `/api/v1/metrics/analyze?nodeId=${encodeURIComponent(nm.node.id)}` +
-      `&name=${encodeURIComponent(metricName)}` +
-      `&windowSeconds=${nm.windowSeconds}` +
-      `&bucketSeconds=${Math.max(10, Math.floor(nm.windowSeconds / 60))}` +
-      `&topN=8`
-    );
-    renderAnalysis(data);
-  } catch (e) {
-    document.getElementById('anLoading').textContent = 'Ошибка: ' + e.message;
-  }
-}
-
-function closeAnalysisModal() {
-  document.getElementById('analysisModal').classList.remove('open');
-}
-
-function renderAnalysis(data) {
-  document.getElementById('anLoading').style.display = 'none';
-  document.getElementById('anContent').style.display = 'block';
-
-  const t = data.target || {};
-  const card = document.getElementById('anTargetCard');
-  card.classList.toggle('anomaly', !!t.anomaly);
-
-  document.getElementById('anTargetName').textContent = metricLabel(t.name) || '—';
-
-  const badges = [];
-  if (t.anomaly) badges.push('<span class="badge anom">АНОМАЛИЯ</span>');
-  else           badges.push('<span class="badge norm">НОРМА</span>');
-  if (t.trend === 'RISING')  badges.push('<span class="badge rising">РОСТ</span>');
-  if (t.trend === 'FALLING') badges.push('<span class="badge falling">ПАДЕНИЕ</span>');
-  if (t.trend === 'STABLE')  badges.push('<span class="badge stable">СТАБИЛЬНО</span>');
-  document.getElementById('anTargetBadges').innerHTML = badges.join(' ');
-
-  document.getElementById('anCurrent').textContent = fmtNum(t.currentValue);
-  document.getElementById('anMean').textContent    = fmtNum(t.mean);
-  document.getElementById('anStddev').textContent  = fmtNum(t.stddev);
-  document.getElementById('anZ').textContent       = fmtNum(t.zScore);
-  const sign = t.changePercent > 0 ? '+' : '';
-  document.getElementById('anChange').textContent  = sign + fmtNum(t.changePercent) + ' %';
-  document.getElementById('anSamples').textContent = t.sampleCount;
-
-  document.getElementById('anSummary').textContent = data.summary || '—';
-
-  const corrs = data.correlations || [];
-  const list = document.getElementById('anCorrelations');
-  const empty = document.getElementById('anEmptyCorrs');
-  list.innerHTML = '';
-
-  if (corrs.length === 0) {
-    empty.style.display = 'block';
-  } else {
-    empty.style.display = 'none';
-    corrs.forEach(c => {
-      const absR = Math.abs(c.correlation);
-      const widthPct = Math.round(absR * 100);
-      const dirClass = c.correlation >= 0 ? 'pos' : 'neg';
-      const dirText  = c.correlation >= 0 ? 'синхронный рост/падение' : 'обратное движение';
-      const changeSign = c.changePercent > 0 ? '+' : '';
-      const row = document.createElement('div');
-      row.className = 'corr-row';
-      row.innerHTML = `
-        <div class="top">
-          <div class="name">${escapeHtml(metricLabel(c.name))}</div>
-          <div style="font-size:10px;color:#64748b;">${escapeHtml(c.name)}</div>
-          <div class="badges">
-            <span class="badge strength-${c.strength}">${c.strength}</span>
-            <span style="font-family: monospace; font-size: 13px; color:#cbd5e1;">r = ${fmtNum(c.correlation, 3)}</span>
-          </div>
-        </div>
-        <div class="bar-wrap"><div class="bar ${dirClass}" style="width: ${widthPct}%"></div></div>
-        <div class="details">
-          ${dirText} · текущее: ${fmtNum(c.currentValue)} · среднее: ${fmtNum(c.mean)} · изменение: ${changeSign}${fmtNum(c.changePercent)}%
-        </div>
-      `;
-      list.appendChild(row);
-    });
-  }
-}
-
-function fmtNum(v, decimals = 2) {
-  if (v == null || isNaN(v)) return '—';
-  return Number(v).toFixed(decimals);
-}
-
-// ============================================================
-// Add-node wizard — выпуск agent-токена и генерация install-команды
-// ============================================================
-
-let wiz = {
-  selectedOs: 'linux',
-  issuedToken: null,
-  nodeName: '',
-};
-
-function openAddNodeWizard() {
-  document.getElementById('wizTokenName').value = '';
-  document.getElementById('wizNodeName').value = '';
-  document.getElementById('wizStep1').style.display = 'block';
-  document.getElementById('wizStep2').style.display = 'none';
-  document.getElementById('wizStep').textContent = '1';
-  selectOs('linux');
-  document.getElementById('wizModal').classList.add('open');
-  refreshTokenList();
-}
-
-function closeAddNodeWizard() {
-  document.getElementById('wizModal').classList.remove('open');
-  wiz.issuedToken = null;
-}
-
-function selectOs(os) {
-  wiz.selectedOs = os;
-  document.querySelectorAll('.os-tab').forEach(el => {
-    el.classList.toggle('active', el.dataset.os === os);
-  });
-  // если уже на втором шаге — обновить команду
-  if (document.getElementById('wizStep2').style.display !== 'none' && wiz.issuedToken) {
-    document.getElementById('wizInstallCmdText').textContent = buildInstallCmd();
-  }
-}
-
-async function wizGenerateToken() {
-  const name = document.getElementById('wizTokenName').value.trim() || 'agent';
-  const nodeName = document.getElementById('wizNodeName').value.trim();
-  try {
-    const res = await api('/api/v1/agent-tokens', {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    });
-    wiz.issuedToken = res.token;
-    wiz.nodeName = nodeName;
-    document.getElementById('wizTokenValue').textContent = res.token;
-    document.getElementById('wizInstallCmdText').textContent = buildInstallCmd();
-    document.getElementById('wizStep1').style.display = 'none';
-    document.getElementById('wizStep2').style.display = 'block';
-    document.getElementById('wizStep').textContent = '2';
-    refreshTokenList();
-  } catch (e) {
-    alert('Не удалось выпустить токен: ' + e.message);
-  }
-}
-
-function wizBack() {
-  document.getElementById('wizStep1').style.display = 'block';
-  document.getElementById('wizStep2').style.display = 'none';
-  document.getElementById('wizStep').textContent = '1';
-  // токен уже выпущен и виден в списке — можно либо его оставить, либо отозвать;
-  // мы просто закрываем «свежевыпущенный» вид
-  wiz.issuedToken = null;
-}
-
-// Собрать однострочную install-команду под выбранную ОС
-function buildInstallCmd() {
-  const serverUrl = window.location.origin;
-  const token = wiz.issuedToken;
-  const nodeArg = wiz.nodeName ? ` --node-name "${wiz.nodeName}"` : '';
-  const nodeArgPs = wiz.nodeName ? ` -NodeName "${wiz.nodeName}"` : '';
-  if (wiz.selectedOs === 'linux') {
-    // Python — самое надёжное на Linux/macOS
-    return [
-      `# 1. Скачать и запустить Python-агент (нужен Python 3 и psutil):`,
-      `pip install psutil`,
-      `curl -sSL ${serverUrl}/install/agent.py | python3 - \\`,
-      `    --server ${serverUrl} \\`,
-      `    --token ${token}${nodeArg}`,
-    ].join('\n');
-  }
-  if (wiz.selectedOs === 'windows') {
-    // Одна строка: качаем .ps1 во временный путь и сразу запускаем.
-    // Работает И в cmd.exe, И в PowerShell, И в Windows Terminal —
-    // powershell.exe есть в любой Windows из коробки. -ExecutionPolicy Bypass
-    // обходит блок на неподписанные скрипты при дефолтной политике Restricted.
-    const nodeArgInside = wiz.nodeName ? ` -NodeName '${wiz.nodeName.replace(/'/g, "''")}'` : '';
-    const psCmd =
-      `$ErrorActionPreference='Stop'; ` +
-      `[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; ` +
-      `$p=Join-Path $env:TEMP 'agent.ps1'; ` +
-      `Invoke-WebRequest '${serverUrl}/install/agent.ps1' -UseBasicParsing -OutFile $p; ` +
-      `& $p -Server '${serverUrl}' -Token '${token}'${nodeArgInside}`;
-    return [
-      `# Открой cmd.exe ИЛИ PowerShell (без admin) и вставь одной строкой:`,
-      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd}"`,
-    ].join('\n');
-  }
-  // bash
-  return [
-    `# Bash-агент (Linux/macOS, без Python — только curl + bc):`,
-    `curl -sSL ${serverUrl}/install/agent.sh -o agent.sh && chmod +x agent.sh`,
-    `./agent.sh --server ${serverUrl} --token ${token}${nodeArg}`,
-  ].join('\n');
-}
-
-function copyInstallCmd(btn) {
-  const text = document.getElementById('wizInstallCmdText').textContent;
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = 'Скопировано';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Копировать'; btn.classList.remove('copied'); }, 1500);
-  });
-}
-
-async function refreshTokenList() {
-  const body = document.getElementById('wizTokenListBody');
-  try {
-    const tokens = await api('/api/v1/agent-tokens');
-    if (tokens.length === 0) {
-      body.innerHTML = '<div class="muted" style="font-size: 12px;">Пока нет ни одного токена.</div>';
-      return;
-    }
-    body.innerHTML = '';
-    tokens.forEach(t => {
-      const row = document.createElement('div');
-      row.className = 'token-row' + (t.revoked ? ' revoked' : '');
-      const lastUsed = t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleString() : 'ни разу';
-      const created = t.createdAt ? new Date(t.createdAt).toLocaleString() : '?';
-      row.innerHTML = `
-        <div>
-          <div class="name">${escapeHtml(t.name)} ${t.revoked ? '<span class="muted">(отозван)</span>' : ''}</div>
-          <div class="meta">создан: ${escapeHtml(created)} · последний вызов: ${escapeHtml(lastUsed)} · <span class="suffix">…${escapeHtml(t.tokenSuffix)}</span></div>
-        </div>
-        ${t.revoked ? '' : `<button class="danger-btn" onclick="revokeToken('${t.id}')">Отозвать</button>`}
-      `;
-      body.appendChild(row);
-    });
-  } catch (e) {
-    body.innerHTML = '<div class="muted" style="font-size: 12px;">Не удалось загрузить токены: ' + escapeHtml(e.message) + '</div>';
-  }
-}
-
-async function revokeToken(id) {
-  if (!confirm('Отозвать этот токен? Все агенты, использующие его, перестанут работать.')) return;
-  try {
-    await api('/api/v1/agent-tokens/' + id, { method: 'DELETE' });
-    refreshTokenList();
-  } catch (e) {
-    alert('Не удалось отозвать: ' + e.message);
-  }
-}
-
-// ============================================================
-// Alert rules — CRUD
-// ============================================================
-
-// Кэш узлов и метрик для подсказок в форме правила
-let _rulesCache = { rules: [], nodes: [] };
-
-const COND_LABEL = {
-  GT: '>', GTE: '⩾', LT: '<', LTE: '⩽', EQ: '=', NEQ: '≠'
-};
-
-async function refreshRules(nodes) {
-  const tbody = document.getElementById('rulesTbody');
-  if (!tbody) return;
-  let rules;
-  try {
-    rules = await api('/api/v1/alerts/rules');
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="muted">Не удалось загрузить правила: ${escapeHtml(e.message)}</td></tr>`;
-    return;
-  }
-  _rulesCache.rules = rules || [];
-  _rulesCache.nodes = nodes || [];
-
-  if (rules.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Правил пока нет. Нажми «+ Создать правило».</td></tr>';
-    return;
-  }
-  const nodeNameById = {};
-  (nodes || []).forEach(n => { nodeNameById[n.id] = n.name; });
-
-  tbody.innerHTML = '';
-  rules.forEach(r => {
-    const tr = document.createElement('tr');
-    tr.className = 'rule-row' + (r.enabled ? '' : ' rule-disabled');
-    const nodeCell = r.nodeId
-      ? escapeHtml(nodeNameById[r.nodeId] || r.nodeId.slice(0, 8) + '…')
-      : '<span class="muted">все</span>';
-    const cond = `${escapeHtml(r.condition)} ${COND_LABEL[r.condition] || ''} ${fmtNum(r.threshold, 2)}`;
-    tr.innerHTML = `
-      <td>${escapeHtml(r.name)}</td>
-      <td><span class="pill">${escapeHtml(r.metricName)}</span></td>
-      <td>${nodeCell}</td>
-      <td><span class="pill">${cond}</span></td>
-      <td>${r.durationSeconds} сек</td>
-      <td class="sev-${r.severity}">${r.severity}</td>
-      <td>${r.enabled ? '✓' : '—'}</td>
-      <td><div class="rule-actions">
-        <button class="secondary-btn" onclick='openRuleModal(${JSON.stringify(r.id)})'>Изменить</button>
-        <button class="danger-btn" onclick='deleteRule(${JSON.stringify(r.id)}, ${JSON.stringify(r.name)})'>Удалить</button>
-      </div></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function openRuleModal(id) {
-  document.getElementById('ruleErr').textContent = '';
-  document.getElementById('ruleHint').textContent = '';
-  // Подставить список узлов в селект
-  const sel = document.getElementById('ruleNodeId');
-  sel.innerHTML = '<option value="">— все узлы —</option>';
-  (_rulesCache.nodes || []).forEach(n => {
-    const opt = document.createElement('option');
-    opt.value = n.id;
-    opt.textContent = n.name;
-    sel.appendChild(opt);
-  });
-
-  // Подсказка по уже виденным метрикам
-  loadKnownMetrics();
-
-  if (id) {
-    const r = (_rulesCache.rules || []).find(x => x.id === id);
-    if (!r) return;
-    document.getElementById('ruleModalTitle').textContent = 'Редактировать правило';
-    document.getElementById('ruleId').value = r.id;
-    document.getElementById('ruleName').value = r.name || '';
-    document.getElementById('ruleMetricName').value = r.metricName || '';
-    document.getElementById('ruleNodeId').value = r.nodeId || '';
-    document.getElementById('ruleCondition').value = r.condition || 'GT';
-    document.getElementById('ruleThreshold').value = r.threshold;
-    document.getElementById('ruleDuration').value = r.durationSeconds || 30;
-    document.getElementById('ruleSeverity').value = r.severity || 'WARNING';
-    document.getElementById('ruleDescription').value = r.description || '';
-    document.getElementById('ruleEnabled').checked = !!r.enabled;
-    document.getElementById('ruleDeleteBtn').style.display = 'inline-block';
-  } else {
-    document.getElementById('ruleModalTitle').textContent = 'Новое правило алерта';
-    document.getElementById('ruleId').value = '';
-    document.getElementById('ruleName').value = '';
-    document.getElementById('ruleMetricName').value = '';
-    document.getElementById('ruleNodeId').value = '';
-    document.getElementById('ruleCondition').value = 'GT';
-    document.getElementById('ruleThreshold').value = '';
-    document.getElementById('ruleDuration').value = '30';
-    document.getElementById('ruleSeverity').value = 'WARNING';
-    document.getElementById('ruleDescription').value = '';
-    document.getElementById('ruleEnabled').checked = true;
-    document.getElementById('ruleDeleteBtn').style.display = 'none';
-  }
-  document.getElementById('ruleModal').classList.add('open');
-}
-
-function closeRuleModal() {
-  document.getElementById('ruleModal').classList.remove('open');
-}
-
-async function loadKnownMetrics() {
-  try {
-    const names = await api('/api/v1/metrics/names');
-    if (Array.isArray(names) && names.length > 0) {
-      document.getElementById('ruleHint').innerHTML =
-        'Известные имена метрик: ' +
-        names.slice(0, 12).map(n => `<span class="pill" style="cursor:pointer" onclick="document.getElementById('ruleMetricName').value='${escapeHtml(n)}'">${escapeHtml(n)}</span>`).join(' ');
-    }
-  } catch (e) { /* ignore */ }
-}
-
-async function saveRule() {
-  const errEl = document.getElementById('ruleErr');
-  errEl.textContent = '';
-
-  const id            = document.getElementById('ruleId').value.trim();
-  const name          = document.getElementById('ruleName').value.trim();
-  const metricName    = document.getElementById('ruleMetricName').value.trim();
-  const nodeId        = document.getElementById('ruleNodeId').value.trim();
-  const condition     = document.getElementById('ruleCondition').value;
-  const threshold     = parseFloat(document.getElementById('ruleThreshold').value);
-  const duration      = parseInt(document.getElementById('ruleDuration').value, 10);
-  const severity      = document.getElementById('ruleSeverity').value;
-  const description   = document.getElementById('ruleDescription').value.trim();
-  const enabled       = document.getElementById('ruleEnabled').checked;
-
-  if (!name)            { errEl.textContent = 'Укажите имя правила'; return; }
-  if (!metricName)      { errEl.textContent = 'Укажите имя метрики'; return; }
-  if (Number.isNaN(threshold)) { errEl.textContent = 'Порог должен быть числом'; return; }
-  if (!duration || duration < 1) { errEl.textContent = 'Длительность должна быть >= 1 секунды'; return; }
-
-  const body = {
-    name, metricName,
-    nodeId: nodeId || null,
-    condition, threshold,
-    durationSeconds: duration,
-    severity,
-    description: description || null,
-    enabled,
-  };
-  if (id) body.id = id;
-
-  try {
-    await api('/api/v1/alerts/rules', { method: 'POST', body: JSON.stringify(body) });
-    closeRuleModal();
-    refresh();
-  } catch (e) {
-    errEl.textContent = 'Ошибка: ' + e.message;
-  }
-}
-
-async function deleteRule(id, name) {
-  if (!confirm(`Удалить правило «${name}»? Активные алерты по нему будут разрешены.`)) return;
-  try {
-    await api('/api/v1/alerts/rules/' + id, { method: 'DELETE' });
-    refresh();
-  } catch (e) {
-    alert('Не удалось удалить: ' + e.message);
-  }
-}
-
-async function deleteRuleFromModal() {
-  const id = document.getElementById('ruleId').value.trim();
-  const name = document.getElementById('ruleName').value.trim();
-  if (!id) return;
-  if (!confirm(`Удалить правило «${name}»? Активные алерты по нему будут разрешены.`)) return;
-  try {
-    await api('/api/v1/alerts/rules/' + id, { method: 'DELETE' });
-    closeRuleModal();
-    refresh();
-  } catch (e) {
-    document.getElementById('ruleErr').textContent = 'Ошибка: ' + e.message;
-  }
-}
-
-// Esc closes modals (analysis first, then node, then rule, then wizard)
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if (document.getElementById('analysisModal').classList.contains('open')) {
-      closeAnalysisModal();
-    } else if (document.getElementById('nodeModal').classList.contains('open')) {
-      closeNodeModal();
-    } else if (document.getElementById('ruleModal').classList.contains('open')) {
-      closeRuleModal();
-    } else if (document.getElementById('wizModal').classList.contains('open')) {
-      closeAddNodeWizard();
-    }
-  }
-});
-
-// При загрузке: если есть токен — показать дашборд, иначе — экран логина
-if (getToken()) {
-  showApp();
-} else {
-  showAuth();
-}
-
-// Enter в полях логина запускает вход
-['authUsername', 'authPassword'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') doLogin();
-  });
-});
-</script>
+<script src="/js/utils.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/node-modal.js"></script>
+<script src="/js/analysis.js"></script>
+<script src="/js/wizard.js"></script>
+<script src="/js/rules.js"></script>
+<script src="/js/main.js"></script>
 </body>
 </html>
