@@ -126,7 +126,12 @@
   .wiz-box h2 { margin: 0 0 6px 0; font-size: 18px; }
   .wiz-box .step-meta { color: #94a3b8; font-size: 12px; margin-bottom: 20px; }
   .wiz-box label { display: block; font-size: 12px; color: #94a3b8; margin: 14px 0 4px; }
-  .wiz-box input[type="text"] { width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px; }
+  .wiz-box input[type="text"], .wiz-box input[type="number"] { width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px; }
+  .rule-row td { vertical-align: middle; }
+  .rule-row .rule-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .rule-row .rule-actions button { padding: 4px 10px; font-size: 11px; }
+  .rule-disabled { opacity: .55; }
+  .pill { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; background: #334155; color: #cbd5e1; font-family: monospace; }
   .os-tabs { display: flex; gap: 4px; margin: 16px 0 12px; border-bottom: 1px solid #334155; }
   .os-tab { padding: 8px 14px; cursor: pointer; color: #94a3b8; font-size: 13px; border-bottom: 2px solid transparent; }
   .os-tab.active { color: #f8fafc; border-bottom-color: #3b82f6; }
@@ -227,6 +232,19 @@
       <tbody id="alertsTbody"></tbody>
     </table>
   </div>
+
+  <div class="card" style="grid-column: 1 / -1;">
+    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <h2 style="margin:0;">Правила алертов <span class="muted" style="text-transform: none; letter-spacing: normal;">(когда правило срабатывает — создаётся алерт)</span></h2>
+      <button class="primary-btn" onclick="openRuleModal()">+ Создать правило</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Имя</th><th>Метрика</th><th>Узел</th><th>Условие</th><th>Окно</th><th>Severity</th><th>Вкл.</th><th></th></tr>
+      </thead>
+      <tbody id="rulesTbody"></tbody>
+    </table>
+  </div>
 </main>
 </div>
 
@@ -284,7 +302,7 @@
     <!-- ШАГ 1: имя токена и OS -->
     <div id="wizStep1">
       <label>Имя токена (как ты будешь его узнавать в списке)</label>
-      <input type="text" id="wizTokenName" placeholder="например: ноутбук Михаила" maxlength="64" />
+      <input type="text" id="wizTokenName" placeholder="например: production-fleet" maxlength="64" />
 
       <label>Операционная система целевой машины</label>
       <div class="os-tabs">
@@ -336,6 +354,90 @@
       </div>
       <div id="wizTokenListBody" class="token-list">
         <div class="muted" style="font-size: 12px;">загрузка…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Alert rule modal ====== -->
+<div id="ruleModal" class="wiz-modal" onclick="if(event.target===this)closeRuleModal()">
+  <div class="wiz-box" style="max-width: 560px;">
+    <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <div>
+        <h2 id="ruleModalTitle">Новое правило алерта</h2>
+        <div class="step-meta">сравнение метрики с порогом за окно времени</div>
+      </div>
+      <button class="secondary-btn" onclick="closeRuleModal()">Закрыть</button>
+    </div>
+
+    <input type="hidden" id="ruleId" value="" />
+
+    <label>Имя правила</label>
+    <input type="text" id="ruleName" placeholder="например: HighCPU" maxlength="128" />
+
+    <label>Имя метрики</label>
+    <input type="text" id="ruleMetricName" placeholder="cpu.usage" maxlength="128" />
+    <div class="muted" style="font-size: 11px; margin-top: 4px;">
+      Ровно как метрика приходит от агента. Подсказка по уже виденным метрикам — внизу формы.
+    </div>
+
+    <label>Узел (необязательно — пусто = ко всем своим узлам)</label>
+    <select id="ruleNodeId" style="width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px;">
+      <option value="">— все узлы —</option>
+    </select>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div>
+        <label>Условие</label>
+        <select id="ruleCondition" style="width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px;">
+          <option value="GT">GT — больше</option>
+          <option value="GTE">GTE — больше или равно</option>
+          <option value="LT">LT — меньше</option>
+          <option value="LTE">LTE — меньше или равно</option>
+          <option value="EQ">EQ — равно</option>
+          <option value="NEQ">NEQ — не равно</option>
+        </select>
+      </div>
+      <div>
+        <label>Порог</label>
+        <input type="number" id="ruleThreshold" step="any" placeholder="80" />
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div>
+        <label>Длительность нарушения, сек</label>
+        <input type="number" id="ruleDuration" min="1" value="30" />
+        <div class="muted" style="font-size: 11px; margin-top: 4px;">
+          Все точки в окне должны нарушать порог.
+        </div>
+      </div>
+      <div>
+        <label>Severity</label>
+        <select id="ruleSeverity" style="width: 100%; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; color: #e2e8f0; border-radius: 4px; font-size: 14px;">
+          <option value="INFO">INFO</option>
+          <option value="WARNING" selected>WARNING</option>
+          <option value="CRITICAL">CRITICAL</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Описание (необязательно)</label>
+    <input type="text" id="ruleDescription" placeholder="например: CPU выше 80% дольше 30 сек" maxlength="500" />
+
+    <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 14px;">
+      <input type="checkbox" id="ruleEnabled" checked /> Включено
+    </label>
+
+    <div id="ruleHint" class="muted" style="font-size: 11px; margin-top: 14px;"></div>
+
+    <div id="ruleErr" style="color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px;"></div>
+
+    <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 18px;">
+      <button id="ruleDeleteBtn" class="danger-btn" style="display: none;" onclick="deleteRuleFromModal()">Удалить</button>
+      <div style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="secondary-btn" onclick="closeRuleModal()">Отмена</button>
+        <button class="primary-btn" onclick="saveRule()">Сохранить</button>
       </div>
     </div>
   </div>
@@ -554,6 +656,9 @@ async function refresh() {
          <td class="sev-${a.severity}">${a.severity}</td>
          <td>${a.status}</td></tr>`);
     });
+
+    // Правила алертов — отдельный запрос (нет в overview)
+    refreshRules(d.nodes || []);
   } catch (e) {
     console.error(e);
   }
@@ -994,10 +1099,20 @@ function buildInstallCmd() {
     ].join('\n');
   }
   if (wiz.selectedOs === 'windows') {
+    // Одна строка: качаем .ps1 во временный путь и сразу запускаем.
+    // Работает И в cmd.exe, И в PowerShell, И в Windows Terminal —
+    // powershell.exe есть в любой Windows из коробки. -ExecutionPolicy Bypass
+    // обходит блок на неподписанные скрипты при дефолтной политике Restricted.
+    const nodeArgInside = wiz.nodeName ? ` -NodeName '${wiz.nodeName.replace(/'/g, "''")}'` : '';
+    const psCmd =
+      `$ErrorActionPreference='Stop'; ` +
+      `[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; ` +
+      `$p=Join-Path $env:TEMP 'agent.ps1'; ` +
+      `Invoke-WebRequest '${serverUrl}/install/agent.ps1' -UseBasicParsing -OutFile $p; ` +
+      `& $p -Server '${serverUrl}' -Token '${token}'${nodeArgInside}`;
     return [
-      `# Запусти в PowerShell от обычного юзера (без admin):`,
-      `iwr ${serverUrl}/install/agent.ps1 -OutFile agent.ps1`,
-      `.\\agent.ps1 -Server ${serverUrl} -Token ${token}${nodeArgPs}`,
+      `# Открой cmd.exe ИЛИ PowerShell (без admin) и вставь одной строкой:`,
+      `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd}"`,
     ].join('\n');
   }
   // bash
@@ -1055,13 +1170,198 @@ async function revokeToken(id) {
   }
 }
 
-// Esc closes modals (analysis first, then node, then wizard)
+// ============================================================
+// Alert rules — CRUD
+// ============================================================
+
+// Кэш узлов и метрик для подсказок в форме правила
+let _rulesCache = { rules: [], nodes: [] };
+
+const COND_LABEL = {
+  GT: '>', GTE: '⩾', LT: '<', LTE: '⩽', EQ: '=', NEQ: '≠'
+};
+
+async function refreshRules(nodes) {
+  const tbody = document.getElementById('rulesTbody');
+  if (!tbody) return;
+  let rules;
+  try {
+    rules = await api('/api/v1/alerts/rules');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">Не удалось загрузить правила: ${escapeHtml(e.message)}</td></tr>`;
+    return;
+  }
+  _rulesCache.rules = rules || [];
+  _rulesCache.nodes = nodes || [];
+
+  if (rules.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Правил пока нет. Нажми «+ Создать правило».</td></tr>';
+    return;
+  }
+  const nodeNameById = {};
+  (nodes || []).forEach(n => { nodeNameById[n.id] = n.name; });
+
+  tbody.innerHTML = '';
+  rules.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = 'rule-row' + (r.enabled ? '' : ' rule-disabled');
+    const nodeCell = r.nodeId
+      ? escapeHtml(nodeNameById[r.nodeId] || r.nodeId.slice(0, 8) + '…')
+      : '<span class="muted">все</span>';
+    const cond = `${escapeHtml(r.condition)} ${COND_LABEL[r.condition] || ''} ${fmtNum(r.threshold, 2)}`;
+    tr.innerHTML = `
+      <td>${escapeHtml(r.name)}</td>
+      <td><span class="pill">${escapeHtml(r.metricName)}</span></td>
+      <td>${nodeCell}</td>
+      <td><span class="pill">${cond}</span></td>
+      <td>${r.durationSeconds} сек</td>
+      <td class="sev-${r.severity}">${r.severity}</td>
+      <td>${r.enabled ? '✓' : '—'}</td>
+      <td><div class="rule-actions">
+        <button class="secondary-btn" onclick='openRuleModal(${JSON.stringify(r.id)})'>Изменить</button>
+        <button class="danger-btn" onclick='deleteRule(${JSON.stringify(r.id)}, ${JSON.stringify(r.name)})'>Удалить</button>
+      </div></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function openRuleModal(id) {
+  document.getElementById('ruleErr').textContent = '';
+  document.getElementById('ruleHint').textContent = '';
+  // Подставить список узлов в селект
+  const sel = document.getElementById('ruleNodeId');
+  sel.innerHTML = '<option value="">— все узлы —</option>';
+  (_rulesCache.nodes || []).forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n.id;
+    opt.textContent = n.name;
+    sel.appendChild(opt);
+  });
+
+  // Подсказка по уже виденным метрикам
+  loadKnownMetrics();
+
+  if (id) {
+    const r = (_rulesCache.rules || []).find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('ruleModalTitle').textContent = 'Редактировать правило';
+    document.getElementById('ruleId').value = r.id;
+    document.getElementById('ruleName').value = r.name || '';
+    document.getElementById('ruleMetricName').value = r.metricName || '';
+    document.getElementById('ruleNodeId').value = r.nodeId || '';
+    document.getElementById('ruleCondition').value = r.condition || 'GT';
+    document.getElementById('ruleThreshold').value = r.threshold;
+    document.getElementById('ruleDuration').value = r.durationSeconds || 30;
+    document.getElementById('ruleSeverity').value = r.severity || 'WARNING';
+    document.getElementById('ruleDescription').value = r.description || '';
+    document.getElementById('ruleEnabled').checked = !!r.enabled;
+    document.getElementById('ruleDeleteBtn').style.display = 'inline-block';
+  } else {
+    document.getElementById('ruleModalTitle').textContent = 'Новое правило алерта';
+    document.getElementById('ruleId').value = '';
+    document.getElementById('ruleName').value = '';
+    document.getElementById('ruleMetricName').value = '';
+    document.getElementById('ruleNodeId').value = '';
+    document.getElementById('ruleCondition').value = 'GT';
+    document.getElementById('ruleThreshold').value = '';
+    document.getElementById('ruleDuration').value = '30';
+    document.getElementById('ruleSeverity').value = 'WARNING';
+    document.getElementById('ruleDescription').value = '';
+    document.getElementById('ruleEnabled').checked = true;
+    document.getElementById('ruleDeleteBtn').style.display = 'none';
+  }
+  document.getElementById('ruleModal').classList.add('open');
+}
+
+function closeRuleModal() {
+  document.getElementById('ruleModal').classList.remove('open');
+}
+
+async function loadKnownMetrics() {
+  try {
+    const names = await api('/api/v1/metrics/names');
+    if (Array.isArray(names) && names.length > 0) {
+      document.getElementById('ruleHint').innerHTML =
+        'Известные имена метрик: ' +
+        names.slice(0, 12).map(n => `<span class="pill" style="cursor:pointer" onclick="document.getElementById('ruleMetricName').value='${escapeHtml(n)}'">${escapeHtml(n)}</span>`).join(' ');
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function saveRule() {
+  const errEl = document.getElementById('ruleErr');
+  errEl.textContent = '';
+
+  const id            = document.getElementById('ruleId').value.trim();
+  const name          = document.getElementById('ruleName').value.trim();
+  const metricName    = document.getElementById('ruleMetricName').value.trim();
+  const nodeId        = document.getElementById('ruleNodeId').value.trim();
+  const condition     = document.getElementById('ruleCondition').value;
+  const threshold     = parseFloat(document.getElementById('ruleThreshold').value);
+  const duration      = parseInt(document.getElementById('ruleDuration').value, 10);
+  const severity      = document.getElementById('ruleSeverity').value;
+  const description   = document.getElementById('ruleDescription').value.trim();
+  const enabled       = document.getElementById('ruleEnabled').checked;
+
+  if (!name)            { errEl.textContent = 'Укажите имя правила'; return; }
+  if (!metricName)      { errEl.textContent = 'Укажите имя метрики'; return; }
+  if (Number.isNaN(threshold)) { errEl.textContent = 'Порог должен быть числом'; return; }
+  if (!duration || duration < 1) { errEl.textContent = 'Длительность должна быть >= 1 секунды'; return; }
+
+  const body = {
+    name, metricName,
+    nodeId: nodeId || null,
+    condition, threshold,
+    durationSeconds: duration,
+    severity,
+    description: description || null,
+    enabled,
+  };
+  if (id) body.id = id;
+
+  try {
+    await api('/api/v1/alerts/rules', { method: 'POST', body: JSON.stringify(body) });
+    closeRuleModal();
+    refresh();
+  } catch (e) {
+    errEl.textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+async function deleteRule(id, name) {
+  if (!confirm(`Удалить правило «${name}»? Активные алерты по нему будут разрешены.`)) return;
+  try {
+    await api('/api/v1/alerts/rules/' + id, { method: 'DELETE' });
+    refresh();
+  } catch (e) {
+    alert('Не удалось удалить: ' + e.message);
+  }
+}
+
+async function deleteRuleFromModal() {
+  const id = document.getElementById('ruleId').value.trim();
+  const name = document.getElementById('ruleName').value.trim();
+  if (!id) return;
+  if (!confirm(`Удалить правило «${name}»? Активные алерты по нему будут разрешены.`)) return;
+  try {
+    await api('/api/v1/alerts/rules/' + id, { method: 'DELETE' });
+    closeRuleModal();
+    refresh();
+  } catch (e) {
+    document.getElementById('ruleErr').textContent = 'Ошибка: ' + e.message;
+  }
+}
+
+// Esc closes modals (analysis first, then node, then rule, then wizard)
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.getElementById('analysisModal').classList.contains('open')) {
       closeAnalysisModal();
     } else if (document.getElementById('nodeModal').classList.contains('open')) {
       closeNodeModal();
+    } else if (document.getElementById('ruleModal').classList.contains('open')) {
+      closeRuleModal();
     } else if (document.getElementById('wizModal').classList.contains('open')) {
       closeAddNodeWizard();
     }
