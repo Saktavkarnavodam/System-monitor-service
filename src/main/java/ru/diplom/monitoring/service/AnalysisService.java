@@ -129,13 +129,12 @@ public class AnalysisService {
             double r = pearson(targetSeries, otherSeries);
             if (Double.isNaN(r)) continue;     // одна из серий — константа
 
-            // Дополнительная контекстная информация по этой метрике
+            // Контекст для UI: последнее значение метрики по времени, среднее и
+            // относительное изменение начало→конец окна.
             double[] vals = e.getValue().stream().mapToDouble(Metric::getValue).toArray();
-            double currentVal = vals[vals.length - 1];   // search() возвращает DESC -> [0]= последняя; но мы выше bucketize по timestamp, тут проще взять последнюю по списку
-            // Выбираем именно последнюю по времени — DESC от search
-            currentVal = e.getValue().stream()
+            double currentVal = e.getValue().stream()
                     .max(Comparator.comparing(Metric::getTimestamp))
-                    .map(Metric::getValue).orElse(currentVal);
+                    .map(Metric::getValue).orElse(vals[vals.length - 1]);
             double mean = mean(vals);
             double changePct = changePercent(e.getValue());
 
@@ -194,9 +193,12 @@ public class AnalysisService {
 
     /**
      * Раскладывает список метрик по фиксированной bucket-сетке окна.
-     * Возвращает массив длиной {@code numBuckets} — для каждого bucket'а
-     * берётся среднее значение точек, попавших в него (или последний
-     * известный, если bucket пуст — forward-fill).
+     * Возвращает массив длиной {@code numBuckets}: в каждом bucket'е —
+     * среднее значение попавших в него точек. Пробелы между точками
+     * заполняются forward-fill'ом (последним известным значением);
+     * пустые bucket'ы в самом начале окна — backward-fill'ом первого
+     * известного значения. Это даёт корректный ввод для коэффициента
+     * Пирсона: серии одной длины без NaN.
      */
     static double[] bucketize(List<Metric> rows, Instant windowFrom,
                               int bucketSeconds, int windowSeconds) {
@@ -216,29 +218,26 @@ public class AnalysisService {
             counts[idx]++;
         }
 
-        double[] series = new double[numBuckets];
-        double lastKnown = Double.NaN;
+        // Если в окне вообще нет точек — возвращаем нули.
+        int firstKnownIdx = -1;
         for (int i = 0; i < numBuckets; i++) {
+            if (counts[i] > 0) { firstKnownIdx = i; break; }
+        }
+        double[] series = new double[numBuckets];
+        if (firstKnownIdx < 0) return series;
+
+        // Backward-fill: bucket'ы до первой известной точки = первая известная.
+        double firstAvg = sums[firstKnownIdx] / counts[firstKnownIdx];
+        for (int i = 0; i < firstKnownIdx; i++) series[i] = firstAvg;
+
+        // Forward-fill: пробелы после первой точки = последнее известное среднее.
+        double lastKnown = firstAvg;
+        for (int i = firstKnownIdx; i < numBuckets; i++) {
             if (counts[i] > 0) {
                 series[i] = sums[i] / counts[i];
                 lastKnown = series[i];
             } else {
-                // forward-fill (пробелы заполняем последним известным значением)
-                series[i] = Double.isNaN(lastKnown) ? 0 : lastKnown;
-            }
-        }
-        // backward-fill в начале, если первые bucket'ы были пустыми
-        if (Double.isNaN(lastKnown)) return series;
-        double firstKnown = Double.NaN;
-        for (int i = 0; i < numBuckets; i++) {
-            if (counts[i] > 0) { firstKnown = series[i]; break; }
-        }
-        if (!Double.isNaN(firstKnown)) {
-            for (int i = 0; i < numBuckets; i++) {
-                if (counts[i] == 0 && (i == 0 || series[i] == 0 && counts[i] == 0)) {
-                    // только в самом начале — до первого известного
-                    if (i == 0) series[i] = firstKnown;
-                }
+                series[i] = lastKnown;
             }
         }
         return series;
