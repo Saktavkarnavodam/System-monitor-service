@@ -97,7 +97,17 @@ function showApp() {
   const user = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
   document.getElementById('currentUser').textContent = user.username || '?';
   document.getElementById('currentRole').textContent = user.role === 'ADMIN' ? '(admin)' : '';
+  const adminBtn = document.getElementById('notifSettingsBtn');
+  if (adminBtn) adminBtn.style.display = user.role === 'ADMIN' ? 'inline-block' : 'none';
+  // Технические ссылки (Swagger / OpenAPI / Health) и метка «Обновлено» — только админу.
+  const adminTools = document.getElementById('adminTools');
+  if (adminTools) adminTools.style.display = user.role === 'ADMIN' ? '' : 'none';
   refresh();
   if (window._refreshInterval) clearInterval(window._refreshInterval);
   window._refreshInterval = setInterval(refresh, 5000);
+}
+
+function isAdmin() {
+  const user = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
+  return user.role === 'ADMIN';
 }

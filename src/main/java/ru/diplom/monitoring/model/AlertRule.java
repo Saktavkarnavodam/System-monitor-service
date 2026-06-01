@@ -51,6 +51,14 @@ public class AlertRule {
     @Column(length = 500)
     private String description;
 
+    /** Слать уведомление в Telegram при FIRING/RESOLVED. */
+    @Column(name = "notify_telegram", nullable = false)
+    private boolean notifyTelegram = false;
+
+    /** Слать уведомление на email при FIRING/RESOLVED. */
+    @Column(name = "notify_email", nullable = false)
+    private boolean notifyEmail = false;
+
     public AlertRule() {}
 
     public String getId() { return id; }
@@ -85,4 +93,10 @@ public class AlertRule {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public boolean isNotifyTelegram() { return notifyTelegram; }
+    public void setNotifyTelegram(boolean notifyTelegram) { this.notifyTelegram = notifyTelegram; }
+
+    public boolean isNotifyEmail() { return notifyEmail; }
+    public void setNotifyEmail(boolean notifyEmail) { this.notifyEmail = notifyEmail; }
 }

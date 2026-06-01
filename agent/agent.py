@@ -3,9 +3,14 @@
 Агент мониторинга для Linux/macOS/Windows. Шлёт метрики на сервер
 через POST /api/v1/metrics/batch с agent-токеном в Authorization.
 Установка psutil:  pip install --user psutil
+
+Источник параметров (по приоритету): CLI-аргументы > env-файл > переменные среды.
+Env-файл (формат KEY=VALUE) задаётся через --env-file и используется install-скриптами,
+которые ставят агента как systemd-сервис (Linux) / Scheduled Task (Windows).
 """
 import argparse
 import json
+import os
 import socket
 import sys
 import time
@@ -81,15 +86,49 @@ def collect_metrics():
     return [{'name': n, 'value': v, 'unit': u, 'type': 'GAUGE'} for n, v, u in out]
 
 
+def load_env_file(path):
+    """Лёгкий парсер KEY=VALUE-файла (комментарии и пустые строки игнорируются).
+    Используется install-скриптами, которые пишут /etc/monitoring-agent/agent.env
+    или %ProgramData%\monitoring-agent\agent.env. Уже выставленные env-переменные
+    не перезаписываем — CLI/runtime-окружение имеет приоритет."""
+    if not path or not os.path.exists(path):
+        return
+    with open(path, 'r', encoding='utf-8') as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith('#'):
+                continue
+            if '=' not in line:
+                continue
+            k, v = line.split('=', 1)
+            k = k.strip()
+            v = v.strip().strip('"').strip("'")
+            os.environ.setdefault(k, v)
+
+
 def main():
+    # --env-file разбираем ДО argparse, чтобы env-переменные из файла стали дефолтами.
+    if '--env-file' in sys.argv:
+        i = sys.argv.index('--env-file')
+        if i + 1 < len(sys.argv):
+            load_env_file(sys.argv[i + 1])
+
     p = argparse.ArgumentParser(description='Агент мониторинга для distributed-monitoring')
-    p.add_argument('--server',    default='http://localhost:8080')
-    p.add_argument('--token',     required=True, help='Agent-токен (формат agt_…)')
-    p.add_argument('--node-name', default=None,  help='Имя узла (по умолчанию hostname)')
-    p.add_argument('--host',      default=None,  help='Адрес этой машины')
-    p.add_argument('--port',      type=int, default=0)
-    p.add_argument('--interval',  type=int, default=10)
+    p.add_argument('--server',    default=os.environ.get('MONITORING_SERVER', 'http://localhost:8080'))
+    p.add_argument('--token',     default=os.environ.get('MONITORING_TOKEN', ''),
+                   help='Agent-токен (формат agt_…). Можно задать MONITORING_TOKEN в env.')
+    p.add_argument('--node-name', default=os.environ.get('MONITORING_NODE_NAME'),
+                   help='Имя узла (по умолчанию hostname)')
+    p.add_argument('--host',      default=os.environ.get('MONITORING_HOST'),
+                   help='Адрес этой машины')
+    p.add_argument('--port',      type=int, default=int(os.environ.get('MONITORING_PORT', '0') or 0))
+    p.add_argument('--interval',  type=int, default=int(os.environ.get('MONITORING_INTERVAL', '10') or 10))
+    p.add_argument('--env-file',  default=None,
+                   help='Путь к KEY=VALUE-файлу с параметрами (используется install-скриптами)')
     args = p.parse_args()
+
+    if not args.token:
+        sys.exit("ERROR: --token не задан (или переменная MONITORING_TOKEN). Без него агент не сможет авторизоваться.")
 
     if not args.token.startswith('agt_'):
         print("WARN: --token обычно начинается с 'agt_'")
@@ -110,8 +149,19 @@ def main():
     while True:
         try:
             metrics = collect_metrics()
-            result = http_json('POST', f'{args.server}/api/v1/metrics/batch',
-                               args.token, {'nodeId': node_id, 'metrics': metrics})
+            try:
+                result = http_json('POST', f'{args.server}/api/v1/metrics/batch',
+                                   args.token, {'nodeId': node_id, 'metrics': metrics})
+            except RuntimeError as e:
+                # Узел удалили на сервере (404) — перерегистрируемся и повторяем (self-heal),
+                # чтобы агент не залипал навсегда на удалённом node_id.
+                if 'HTTP 404' in str(e):
+                    print("  [warn] узел не найден на сервере — перерегистрирую...", flush=True)
+                    node_id = get_or_register_node(args.server, args.token, node_name, host, args.port)
+                    result = http_json('POST', f'{args.server}/api/v1/metrics/batch',
+                                       args.token, {'nodeId': node_id, 'metrics': metrics})
+                else:
+                    raise
             iteration += 1
             cpu = next((m['value'] for m in metrics if m['name'] == 'cpu.usage'),     '?')
             mem = next((m['value'] for m in metrics if m['name'] == 'memory.percent'), '?')

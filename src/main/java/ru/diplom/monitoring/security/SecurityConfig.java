@@ -39,6 +39,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/", "/index.html", "/favicon.ico",
                                 "/css/**", "/js/**", "/static/**",
+                                // CSS/иконки в корне static/ — раньше отдавалось 401,
+                                // т.к. `/css/**` не покрывает `/styles.css` в корне.
+                                "/*.css", "/*.js", "/*.ico", "/*.png", "/*.svg", "/*.map",
                                 "/api/v1/auth/register", "/api/v1/auth/login",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**",
                                 "/actuator/health", "/actuator/info",

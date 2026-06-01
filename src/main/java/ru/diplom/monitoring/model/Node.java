@@ -9,9 +9,12 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import ru.diplom.monitoring.persistence.MapToJsonConverter;
+import ru.diplom.monitoring.persistence.ServiceListToJsonConverter;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Entity
@@ -48,6 +51,11 @@ public class Node {
     @Column(name = "tags_json", columnDefinition = "TEXT")
     @Convert(converter = MapToJsonConverter.class)
     private Map<String, String> tags = new HashMap<>();
+
+    /** Произвольные сервисы на узле (web, db, cache, …). Каждый прозванивается probe-ом. */
+    @Column(name = "services_json", columnDefinition = "TEXT")
+    @Convert(converter = ServiceListToJsonConverter.class)
+    private List<ServiceTarget> services = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
@@ -90,4 +98,9 @@ public class Node {
 
     public Instant getLastHeartbeat() { return lastHeartbeat; }
     public void setLastHeartbeat(Instant lastHeartbeat) { this.lastHeartbeat = lastHeartbeat; }
+
+    public List<ServiceTarget> getServices() { return services; }
+    public void setServices(List<ServiceTarget> services) {
+        this.services = services == null ? new ArrayList<>() : services;
+    }
 }

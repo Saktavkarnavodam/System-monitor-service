@@ -68,4 +68,27 @@ public interface MetricRepository extends JpaRepository<Metric, Long> {
     @Modifying
     @Query("DELETE FROM Metric m WHERE m.timestamp < :cutoff")
     int deleteOlderThan(@Param("cutoff") Instant cutoff);
+
+    /**
+     * Различные пары (nodeId, name), у которых есть raw-точки в окне [from, to).
+     * Используется downsampler'ом: «найди все серии, у которых появилось,
+     * что свернуть в bucket'ы за последний период».
+     * Возвращает {@code Object[2]} — {nodeId, name}.
+     */
+    @Query("SELECT DISTINCT m.nodeId, m.name FROM Metric m WHERE " +
+            "m.timestamp >= :from AND m.timestamp < :to")
+    List<Object[]> findDistinctNodeAndNameWithDataIn(@Param("from") Instant from,
+                                                     @Param("to") Instant to);
+
+    /**
+     * Все точки для (node, name) в окне [from, to), отсортированные по timestamp ASC.
+     * Используется downsampler'ом для бакетинга.
+     */
+    @Query("SELECT m FROM Metric m WHERE m.nodeId = :nodeId AND m.name = :name AND " +
+            "m.timestamp >= :from AND m.timestamp < :to " +
+            "ORDER BY m.timestamp ASC")
+    List<Metric> findForBucketing(@Param("nodeId") String nodeId,
+                                  @Param("name") String name,
+                                  @Param("from") Instant from,
+                                  @Param("to") Instant to);
 }

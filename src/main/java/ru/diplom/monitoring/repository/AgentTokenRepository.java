@@ -16,4 +16,12 @@ public interface AgentTokenRepository extends JpaRepository<AgentToken, String> 
 
     /** Все токены пользователя (включая отозванные — для UI «история»). */
     List<AgentToken> findByOwnerIdOrderByCreatedAtDesc(String ownerId);
+
+    /**
+     * Невостребованные токены пользователя — выпущены, но ни одного запроса
+     * с ними не приходило. Используется для авто-отзыва при выпуске нового:
+     * если визард прокликали 5 раз без выполнения команды на узле, после
+     * пятого нажатия предыдущие 4 «висящих» отзываются автоматически.
+     */
+    List<AgentToken> findByOwnerIdAndLastUsedAtIsNullAndRevokedFalse(String ownerId);
 }

@@ -35,6 +35,14 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    /** Email пользователя — на этот адрес шлются уведомления, если в правиле включён email-канал. */
+    @Column(length = 200)
+    private String email;
+
+    /** Telegram chat_id (число в виде строки) — куда слать сообщения. */
+    @Column(name = "telegram_chat_id", length = 64)
+    private String telegramChatId;
+
     public User() {}
 
     public User(String id, String username, String passwordHash, Role role, Instant createdAt) {
@@ -59,6 +67,12 @@ public class User {
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+
+    public String getTelegramChatId() { return telegramChatId; }
+    public void setTelegramChatId(String telegramChatId) { this.telegramChatId = telegramChatId; }
 
     public boolean isAdmin() {
         return role == Role.ADMIN;

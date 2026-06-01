@@ -62,7 +62,25 @@ public class AgentInstallController {
         return script("agent.sh", "text/x-shellscript; charset=utf-8");
     }
 
+    @GetMapping(value = "/install-linux.sh", produces = "text/x-shellscript; charset=utf-8")
+    @Operation(summary = "Linux-установщик: ставит agent.py как systemd-сервис (Restart=always)")
+    public ResponseEntity<String> installLinux() throws IOException {
+        return script("install-linux.sh", "text/x-shellscript; charset=utf-8");
+    }
+
+    @GetMapping(value = "/install-windows.ps1", produces = "text/plain; charset=utf-8")
+    @Operation(summary = "Windows-установщик: ставит agent.py как Scheduled Task (AtStartup, авто-рестарт)")
+    public ResponseEntity<String> installWindows() throws IOException {
+        return script("install-windows.ps1", "text/plain; charset=utf-8");
+    }
+
     // -----------------------------------------------------------
+
+    /** UTF-8 BOM: Windows PowerShell 5.1 не уважает HTTP charset при сохранении
+     *  через Invoke-WebRequest -OutFile и пишет файл в системной кодировке
+     *  (cp1251 на русской Windows). Если файл начинается с UTF-8 BOM, PS
+     *  опознаёт его и читает как UTF-8 — кириллица в комментариях не ломается. */
+    private static final String UTF8_BOM = "﻿";
 
     private ResponseEntity<String> script(String fileName, String contentType) throws IOException {
         ClassPathResource res = new ClassPathResource("agent-installers/" + fileName);
@@ -72,6 +90,9 @@ public class AgentInstallController {
         String body;
         try (InputStream in = res.getInputStream()) {
             body = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        if (fileName.endsWith(".ps1") && !body.startsWith(UTF8_BOM)) {
+            body = UTF8_BOM + body;
         }
         HttpHeaders headers = new HttpHeaders();
         headers.set(HttpHeaders.CONTENT_TYPE, contentType);

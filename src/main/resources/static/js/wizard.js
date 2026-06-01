@@ -1,20 +1,72 @@
-// Визард «+ Добавить узел»: выпуск agent-токена + подбор install-команды.
+// Визард «+ Добавить узел» и «Получить команду установки заново»:
+// при открытии сразу выпускает agent-токен под капотом и показывает готовую
+// install-команду. Токен пользователю не показывается — он встроен в команду.
+// Install-команда зовёт install-linux.sh / install-windows.ps1, которые
+// разворачивают агента как systemd-сервис / Scheduled Task с автоперезапуском
+// и автостартом при загрузке узла.
 
 const wiz = {
   selectedOs: 'linux',
   issuedToken: null,
   nodeName: '',
+  reconnectMode: false,
 };
 
-function openAddNodeWizard() {
+function openAddNodeWizard(opts) {
+  opts = opts || {};
+  wiz.reconnectMode = !!opts.reconnectMode;
+  wiz.issuedToken = null;
   document.getElementById('wizTokenName').value = '';
-  document.getElementById('wizNodeName').value  = '';
+  document.getElementById('wizNodeName').value  = opts.prefilledNodeName || '';
   document.getElementById('wizStep1').style.display = 'block';
   document.getElementById('wizStep2').style.display = 'none';
   document.getElementById('wizStep').textContent = '1';
-  selectOs('linux');
+
+  // В reconnect-режиме ОС известна (узел уже зарегистрирован, у него есть
+  // tags.os) — выбираем её автоматически и прячем табы выбора.
+  const osTabsEl = document.querySelector('.os-tabs');
+  const osLabelEl = document.getElementById('wizOsLabel');
+  if (wiz.reconnectMode && opts.node) {
+    const detectedOs = detectOsFromNode(opts.node);
+    selectOs(detectedOs);
+    if (osTabsEl) osTabsEl.style.display = 'none';
+    if (osLabelEl) osLabelEl.style.display = 'none';
+  } else {
+    if (osTabsEl) osTabsEl.style.display = '';
+    if (osLabelEl) osLabelEl.style.display = '';
+    selectOs('linux');
+  }
+
+  // Заголовок и подсказка зависят от режима.
+  const titleEl = document.querySelector('#wizModal h2');
+  const hintEl  = document.getElementById('wizReconnectHint');
+  if (wiz.reconnectMode) {
+    const osLabel = wiz.selectedOs === 'windows' ? 'Windows' : 'Linux';
+    if (titleEl) titleEl.textContent = `Переустановка агента «${opts.prefilledNodeName || ''}» (${osLabel})`;
+    if (hintEl)  hintEl.style.display = 'block';
+  } else {
+    if (titleEl) titleEl.textContent = 'Добавить узел';
+    if (hintEl)  hintEl.style.display = 'none';
+  }
+
   document.getElementById('wizModal').classList.add('open');
   refreshTokenList();
+}
+
+/** Угадывает ОС по tags.os, проставленным агентом при регистрации. */
+function detectOsFromNode(node) {
+  const os = (node && node.tags && (node.tags.os || '')).toLowerCase();
+  if (os.startsWith('win')) return 'windows';
+  return 'linux';
+}
+
+/**
+ * Открывает визард в режиме «дай мне команду установки заново» для конкретного
+ * узла. Используется на карточке узла: ситуация «потерял команду / переставляю
+ * с нуля / агент удалён».
+ */
+function openReconnectWizard(node) {
+  openAddNodeWizard({ reconnectMode: true, prefilledNodeName: node.name, node: node });
 }
 
 function closeAddNodeWizard() {
@@ -33,8 +85,13 @@ function selectOs(os) {
   }
 }
 
+/**
+ * Шаг «Получить команду установки»: выпускает свежий agent-токен под капотом
+ * и показывает готовую команду. Пользователь не видит сам токен — только команду.
+ */
 async function wizGenerateToken() {
-  const name = document.getElementById('wizTokenName').value.trim() || 'agent';
+  const name = document.getElementById('wizTokenName').value.trim()
+            || (wiz.reconnectMode ? `reinstall-${Date.now()}` : 'agent');
   wiz.nodeName = document.getElementById('wizNodeName').value.trim();
   try {
     const res = await api('/api/v1/agent-tokens', {
@@ -42,14 +99,13 @@ async function wizGenerateToken() {
       body: JSON.stringify({ name }),
     });
     wiz.issuedToken = res.token;
-    document.getElementById('wizTokenValue').textContent = res.token;
     document.getElementById('wizInstallCmdText').textContent = buildInstallCmd();
     document.getElementById('wizStep1').style.display = 'none';
     document.getElementById('wizStep2').style.display = 'block';
     document.getElementById('wizStep').textContent = '2';
     refreshTokenList();
   } catch (e) {
-    alert('Не удалось выпустить токен: ' + e.message);
+    alert('Не удалось подготовить команду: ' + e.message);
   }
 }
 
@@ -60,31 +116,29 @@ function wizBack() {
   wiz.issuedToken = null;
 }
 
-// Готовая install-команда для выбранной ОС. Для Windows — однострочный
-// powershell -Command, который работает и из cmd.exe, и из PowerShell.
+// Готовая install-команда для выбранной ОС. Команда зовёт install-linux.sh /
+// install-windows.ps1, которые ставят агента как сервис с автоперезапуском.
 function buildInstallCmd() {
   const url   = window.location.origin;
   const token = wiz.issuedToken;
   const node  = wiz.nodeName;
+  const isHttps = url.startsWith('https://');
 
   if (wiz.selectedOs === 'windows') {
     const nodeArg = node ? ` -NodeName '${node.replace(/'/g, "''")}'` : '';
-    const ps = [
-      `$ErrorActionPreference='Stop';`,
-      `[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;`,
-      `$p=Join-Path $env:TEMP 'agent.ps1';`,
-      `Invoke-WebRequest '${url}/install/agent.ps1' -UseBasicParsing -OutFile $p;`,
-      `& $p -Server '${url}' -Token '${token}'${nodeArg}`,
-    ].join(' ');
-    return `# cmd.exe или PowerShell — одной строкой:\npowershell -NoProfile -ExecutionPolicy Bypass -Command "${ps}"`;
+    // [scriptblock]::Create вместо iex — короче и без промежуточного файла.
+    // .TrimStart([char]0xFEFF) срезает UTF-8 BOM, который сервер добавляет в .ps1
+    // (нужен для -OutFile на русской Windows). Без trim BOM ломает разбор param().
+    const parts = [];
+    if (isHttps) parts.push(`[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;`);
+    parts.push(`& ([scriptblock]::Create((iwr '${url}/install/install-windows.ps1' -UseBasicParsing).Content.TrimStart([char]0xFEFF))) -Server '${url}' -Token '${token}'${nodeArg}`);
+    const ps = parts.join(' ');
+    return `:: Windows: запускать в КОМАНДНОЙ СТРОКЕ (cmd.exe) от имени администратора.\n:: НЕ в PowerShell — там кавычки разбираются иначе и агент не поднимется.\npowershell -NoP -ep Bypass -Command "${ps}"`;
   }
 
   const nodeArg = node ? ` --node-name "${node}"` : '';
-  if (wiz.selectedOs === 'bash') {
-    return `# Linux/macOS, без Python — нужен только curl и bc:\ncurl -fsSL ${url}/install/agent.sh | bash -s -- --server ${url} --token ${token}${nodeArg}`;
-  }
-  // linux (Python — самое надёжное)
-  return `# Linux/macOS, требуется Python 3 + psutil:\npip install --user psutil && curl -fsSL ${url}/install/agent.py | python3 - --server ${url} --token ${token}${nodeArg}`;
+  // linux: один скрипт ставит систем-сервис, нужен sudo + python3
+  return `# Linux (sudo, нужен python3 + curl):\ncurl -fsSL ${url}/install/install-linux.sh | sudo bash -s -- --server ${url} --token ${token}${nodeArg}`;
 }
 
 function copyInstallCmd(btn) {

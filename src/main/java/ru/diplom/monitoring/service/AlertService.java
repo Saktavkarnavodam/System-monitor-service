@@ -29,15 +29,18 @@ public class AlertService {
     private final AlertRepository alertRepo;
     private final MetricService metricService;
     private final NodeService nodeService;
+    private final AlertNotifier notifier;
 
     public AlertService(AlertRuleRepository ruleRepo,
                         AlertRepository alertRepo,
                         MetricService metricService,
-                        NodeService nodeService) {
+                        NodeService nodeService,
+                        AlertNotifier notifier) {
         this.ruleRepo = ruleRepo;
         this.alertRepo = alertRepo;
         this.metricService = metricService;
         this.nodeService = nodeService;
+        this.notifier = notifier;
     }
 
     public AlertRule saveRule(String ownerId, AlertRule rule) {
@@ -54,6 +57,19 @@ public class AlertService {
             List<String> ownedIds = nodeService.ownedNodeIds(ownerId);
             if (!ownedIds.contains(rule.getNodeId())) {
                 throw new IllegalArgumentException("Узел не принадлежит пользователю: " + rule.getNodeId());
+            }
+        }
+        // Защита от дублей: правило с той же метрикой + условием + порогом + узлом
+        // сработает одновременно с уже существующим, и уведомления придут дважды
+        // (и в Telegram, и на почту). Блокируем такое при создании/редактировании.
+        for (AlertRule other : ruleRepo.findByOwnerId(ownerId)) {
+            if (other.getId().equals(rule.getId())) continue; // не сравниваем правило с самим собой
+            if (sameTarget(other, rule)) {
+                throw new IllegalArgumentException(
+                        "Дубль правила: «" + other.getName() + "» уже отслеживает "
+                        + rule.getMetricName() + " " + rule.getCondition() + " " + rule.getThreshold()
+                        + (rule.getNodeId() == null ? " (все узлы)" : " на этом узле")
+                        + ". Иначе уведомления придут дважды — измените метрику, условие или порог.");
             }
         }
         return ruleRepo.save(rule);
@@ -151,10 +167,12 @@ public class AlertService {
                 alert.setSeverity(rule.getSeverity());
                 alert.setStatus(AlertStatus.FIRING);
                 alert.setFiredAt(now);
-                alert.setMessage(String.format("%s %s %.3f (порог %.3f) в течение %d сек",
+                alert.setMessage(String.format(java.util.Locale.ROOT,
+                        "%s %s %.3f (порог %.3f) в течение %d сек",
                         rule.getMetricName(), rule.getCondition(), latest.getValue(),
                         rule.getThreshold(), rule.getDurationSeconds()));
-                alertRepo.save(alert);
+                Alert saved = alertRepo.save(alert);
+                notifySafely(rule, saved);
             } else {
                 Alert a = existing.get();
                 a.setValue(latest.getValue());
@@ -165,6 +183,19 @@ public class AlertService {
         }
     }
 
+    /**
+     * Async-уведомление; вызывается из транзакции AlertService.evaluate(),
+     * но сам notifier помечен @Async + ловит все исключения внутри,
+     * поэтому транзакция не страдает.
+     */
+    private void notifySafely(AlertRule rule, Alert alert) {
+        try {
+            notifier.notify(rule, alert);
+        } catch (Exception e) {
+            // notifier сам логирует, но на всякий случай — глотаем
+        }
+    }
+
     private void resolveIfActive(AlertRule rule, String nodeId, Instant now, String reason) {
         Optional<Alert> existing = alertRepo.findFirstByRuleIdAndNodeIdAndStatus(
                 rule.getId(), nodeId, AlertStatus.FIRING);
@@ -172,7 +203,8 @@ public class AlertService {
             a.setStatus(AlertStatus.RESOLVED);
             a.setResolvedAt(now);
             a.setMessage((a.getMessage() == null ? "" : a.getMessage()) + " | resolved: " + reason);
-            alertRepo.save(a);
+            Alert saved = alertRepo.save(a);
+            notifySafely(rule, saved);
         });
     }
 
@@ -191,5 +223,18 @@ public class AlertService {
                 alertRepo.save(a);
             }
         }
+    }
+
+    /** Две «мишени» правил совпадают, если это одна метрика, одно условие, один порог и один узел. */
+    private static boolean sameTarget(AlertRule a, AlertRule b) {
+        return a.getCondition() == b.getCondition()
+                && Double.compare(a.getThreshold(), b.getThreshold()) == 0
+                && trimEquals(a.getMetricName(), b.getMetricName())
+                && java.util.Objects.equals(a.getNodeId(), b.getNodeId());
+    }
+
+    private static boolean trimEquals(String x, String y) {
+        if (x == null || y == null) return x == y;
+        return x.trim().equals(y.trim());
     }
 }

@@ -79,4 +79,22 @@ public class UserService {
     public boolean checkPassword(User user, String rawPassword) {
         return passwordEncoder.matches(rawPassword, user.getPasswordHash());
     }
+
+    /**
+     * Обновляет контакты пользователя (email и Telegram chat_id).
+     * null-значение очищает соответствующее поле, пустая строка — тоже.
+     */
+    public User updateContacts(String userId, String email, String telegramChatId) {
+        User u = repo.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("Пользователь не найден: " + userId));
+        u.setEmail(normalize(email));
+        u.setTelegramChatId(normalize(telegramChatId));
+        return repo.save(u);
+    }
+
+    private static String normalize(String s) {
+        if (s == null) return null;
+        String trimmed = s.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
 }

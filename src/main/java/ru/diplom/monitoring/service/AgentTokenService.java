@@ -68,6 +68,18 @@ public class AgentTokenService {
         String label = (name == null || name.isBlank()) ? "agent" : name.trim();
         if (label.length() > 64) label = label.substring(0, 64);
 
+        // Авто-отзыв «висящих» токенов: если пользователь нажал «Получить
+        // команду установки» несколько раз без выполнения её на узле, старые
+        // одноразовые токены копятся в UI. Считаем токен «висящим», если
+        // ни одного запроса с ним не приходило (lastUsedAt == null) — такой
+        // никем не используется и его безопасно отозвать. Уже задействованные
+        // токены (есть хотя бы один запрос) — не трогаем, они стоят на живых
+        // агентах.
+        for (AgentToken stale : repo.findByOwnerIdAndLastUsedAtIsNullAndRevokedFalse(ownerId)) {
+            stale.setRevoked(true);
+            repo.save(stale);
+        }
+
         // 1) генерируем секрет
         String secret = generateSecret();
         String fullToken = TOKEN_PREFIX + secret;

@@ -86,6 +86,12 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- Уведомления Email — SMTP через JavaMailSender. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -115,6 +121,8 @@
                     <include>agent.py</include>
                     <include>agent.ps1</include>
                     <include>agent.sh</include>
+                    <include>install-linux.sh</include>
+                    <include>install-windows.ps1</include>
                 </includes>
             </resource>
         </resources>

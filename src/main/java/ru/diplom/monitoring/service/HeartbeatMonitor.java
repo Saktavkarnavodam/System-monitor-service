@@ -13,7 +13,9 @@ import java.time.Instant;
  * Фоновые задачи поддержания состояния системы:
  *  - обновление статусов узлов по heartbeat-таймаутам;
  *  - оценка алертов;
- *  - retention метрик: удаление старых time-series точек, чтобы БД не пухла.
+ *  - retention raw-метрик (короткое окно);
+ *  - downsampling raw → metrics_5m (Thanos Compactor-аналог);
+ *  - retention downsampled (длинное окно).
  */
 @Component
 public class HeartbeatMonitor {
@@ -23,15 +25,28 @@ public class HeartbeatMonitor {
     private final NodeService nodeService;
     private final AlertService alertService;
     private final MetricService metricService;
+    private final DownsamplingService downsamplingService;
 
-    /** Сколько хранить метрики (часы). Конфигурится через app.metrics.retention-hours. */
-    @Value("${app.metrics.retention-hours:168}")
-    private long retentionHours;
+    /**
+     * Сколько хранить raw-метрики (часы). По умолч. 24 ч — этого достаточно,
+     * чтобы успел отработать downsampler. Графики за период длиннее
+     * рисуются по metrics_5m.
+     */
+    @Value("${app.metrics.retention-hours:24}")
+    private long rawRetentionHours;
 
-    public HeartbeatMonitor(NodeService nodeService, AlertService alertService, MetricService metricService) {
+    /** Сколько хранить downsampled-точки (часы). По умолч. 30 дней. */
+    @Value("${app.metrics.downsample-retention-hours:720}")
+    private long downsampleRetentionHours;
+
+    public HeartbeatMonitor(NodeService nodeService,
+                            AlertService alertService,
+                            MetricService metricService,
+                            DownsamplingService downsamplingService) {
         this.nodeService = nodeService;
         this.alertService = alertService;
         this.metricService = metricService;
+        this.downsamplingService = downsamplingService;
     }
 
     @Scheduled(fixedDelay = 5000L)
@@ -53,19 +68,48 @@ public class HeartbeatMonitor {
     }
 
     /**
-     * Чистит метрики старше retentionHours. Запускается раз в час.
-     * DELETE по индексу idx_metrics_ts — быстрый сегментный delete.
+     * Чистит raw-метрики старше {@code rawRetentionHours}. Запускается раз в час.
+     * DELETE идёт по индексу idx_metrics_ts — быстрый сегментный delete.
      */
     @Scheduled(fixedDelay = 3_600_000L, initialDelay = 60_000L)
-    public void retentionMetrics() {
+    public void retentionRaw() {
         try {
-            Instant cutoff = Instant.now().minus(Duration.ofHours(retentionHours));
+            Instant cutoff = Instant.now().minus(Duration.ofHours(rawRetentionHours));
             int deleted = metricService.deleteOlderThan(cutoff);
             if (deleted > 0) {
-                log.info("Retention: удалено {} метрик старше {}", deleted, cutoff);
+                log.info("Retention raw: удалено {} метрик старше {}", deleted, cutoff);
             }
         } catch (Exception e) {
-            log.warn("Metric retention failed: {}", e.getMessage());
+            log.warn("Raw retention failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Аналог Thanos Compactor. Каждые 5 минут сворачивает «зрелые» raw-точки
+     * в 5-минутные bucket'ы в таблице metrics_5m.
+     */
+    @Scheduled(fixedDelay = 300_000L, initialDelay = 60_000L)
+    public void downsample() {
+        try {
+            downsamplingService.run();
+        } catch (Exception e) {
+            log.warn("Downsampling failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Retention для downsampled-таблицы — раз в сутки, по индексу idx_m5_bucket.
+     */
+    @Scheduled(fixedDelay = 86_400_000L, initialDelay = 120_000L)
+    public void retentionDownsampled() {
+        try {
+            Instant cutoff = Instant.now().minus(Duration.ofHours(downsampleRetentionHours));
+            int deleted = downsamplingService.deleteOlderThan(cutoff);
+            if (deleted > 0) {
+                log.info("Retention 5m: удалено {} bucket'ов старше {}", deleted, cutoff);
+            }
+        } catch (Exception e) {
+            log.warn("Downsample retention failed: {}", e.getMessage());
         }
     }
 }

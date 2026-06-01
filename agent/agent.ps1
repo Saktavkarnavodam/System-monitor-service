@@ -6,14 +6,18 @@
 #   .\agent.ps1 -Server http://my-server:8080 -Token agt_xxx -NodeName web-01
 
 param(
-    [string]$Server   = "http://localhost:8080",
-    [Parameter(Mandatory = $true)]
-    [string]$Token,
-    [string]$NodeName = $env:COMPUTERNAME,
-    [string]$HostAddr = $env:COMPUTERNAME,
-    [int]   $Port     = 0,
-    [int]   $Interval = 10
+    [string]$Server   = $(if ($env:MONITORING_SERVER) { $env:MONITORING_SERVER } else { "http://localhost:8080" }),
+    [string]$Token    = $env:MONITORING_TOKEN,
+    [string]$NodeName = $(if ($env:MONITORING_NODE_NAME) { $env:MONITORING_NODE_NAME } else { $env:COMPUTERNAME }),
+    [string]$HostAddr = $(if ($env:MONITORING_HOST) { $env:MONITORING_HOST } else { $env:COMPUTERNAME }),
+    [int]   $Port     = $(if ($env:MONITORING_PORT) { [int]$env:MONITORING_PORT } else { 0 }),
+    [int]   $Interval = $(if ($env:MONITORING_INTERVAL) { [int]$env:MONITORING_INTERVAL } else { 10 })
 )
+
+if ([string]::IsNullOrWhiteSpace($Token)) {
+    Write-Error "ERROR: -Token не задан (или переменная MONITORING_TOKEN). Без него агент не сможет авторизоваться."
+    exit 2
+}
 
 $ErrorActionPreference = "Continue"
 

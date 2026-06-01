@@ -40,6 +40,25 @@ spring:
       enabled: true        # включена по умолчанию — http://localhost:8080/h2-console
       path: /h2-console
 
+  # ----- SMTP для email-уведомлений ----------------------------------------
+  # По умолчанию ничего не настроено — приложение стартует, но email-канал
+  # будет тихо пропускаться. Переопределите через env-переменные:
+  #   SPRING_MAIL_HOST=smtp.yandex.ru
+  #   SPRING_MAIL_PORT=587
+  #   SPRING_MAIL_USERNAME=alerts@mydomain.ru
+  #   SPRING_MAIL_PASSWORD=xxxxx
+  mail:
+    host: ${SPRING_MAIL_HOST:}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 management:
   endpoints:
     web:
@@ -60,17 +79,32 @@ springdoc:
 
 # ----- Прикладные настройки -----------------------------------------------
 app:
+  # Внешний URL приложения (используется в ссылках из уведомлений)
+  public-url: ${APP_PUBLIC_URL:}
   jwt:
-    # ВНИМАНИЕ: смените секрет в продакшене (мин. 32 символа для HS256)
-    secret: "change-me-please-and-make-this-very-long-monitoring-secret-key"
+    # ВНИМАНИЕ: смените секрет в продакшене (мин. 32 символа для HS256).
+    # На проде задавайте через переменную окружения APP_JWT_SECRET.
+    secret: ${APP_JWT_SECRET:change-me-please-and-make-this-very-long-monitoring-secret-key}
     ttl-seconds: 86400   # 24 часа
   bootstrap-admin:
-    enabled: true
-    username: admin
-    password: admin123
+    enabled: ${APP_BOOTSTRAP_ADMIN_ENABLED:true}
+    username: ${APP_BOOTSTRAP_ADMIN_USERNAME:admin}
+    password: ${APP_BOOTSTRAP_ADMIN_PASSWORD:admin123}
   metrics:
-    # Сколько часов хранить time-series точки (старее — удаляются retention-задачей).
-    retention-hours: 168   # 7 дней
+    # raw retention — сколько хранить сырые точки. По умолч. 24 ч — этого
+    # достаточно, чтобы успел отработать downsampler.
+    retention-hours: ${APP_METRICS_RETENTION_HOURS:24}
+    # downsampling
+    downsample-lookback-hours: ${APP_METRICS_DOWNSAMPLE_LOOKBACK_HOURS:24}
+    downsample-maturity-minutes: ${APP_METRICS_DOWNSAMPLE_MATURITY_MINUTES:10}
+    downsample-retention-hours: ${APP_METRICS_DOWNSAMPLE_RETENTION_HOURS:720}  # 30 дней
+  notifications:
+    telegram:
+      # Создайте бота у @BotFather и вставьте сюда (или в env TELEGRAM_BOT_TOKEN)
+      bot-token: ${TELEGRAM_BOT_TOKEN:}
+    email:
+      # Адрес отправителя (From:) в исходящих письмах
+      from: ${EMAIL_FROM:}
 
 logging:
   level:
@@ -89,6 +123,14 @@ spring:
   h2:
     console:
       enabled: true
+  # отключаем кеш static-ресурсов, иначе браузер показывает старый HTML/JS
+  # после правок: для разработки это важнее, чем лишние HTTP-хеддеры.
+  web:
+    resources:
+      cache:
+        period: 0
+        cachecontrol:
+          no-store: true
   jpa:
     properties:
       hibernate:
@@ -101,14 +143,17 @@ spring:
     activate:
       on-profile: postgres
   datasource:
-    url: jdbc:postgresql://localhost:5432/monitoring
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/monitoring}
     driver-class-name: org.postgresql.Driver
-    username: monitoring
-    password: monitoring
+    username: ${SPRING_DATASOURCE_USERNAME:monitoring}
+    password: ${SPRING_DATASOURCE_PASSWORD:monitoring}
   jpa:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  h2:
+    console:
+      enabled: false
 
 ---
 spring:

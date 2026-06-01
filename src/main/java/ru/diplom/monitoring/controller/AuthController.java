@@ -7,11 +7,13 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import ru.diplom.monitoring.dto.AuthRequest;
 import ru.diplom.monitoring.dto.AuthResponse;
+import ru.diplom.monitoring.dto.UpdateContactsRequest;
 import ru.diplom.monitoring.model.User;
 import ru.diplom.monitoring.security.CurrentUser;
 import ru.diplom.monitoring.security.JwtService;
@@ -56,5 +58,13 @@ public class AuthController {
     @Operation(summary = "Информация о текущем пользователе", security = @SecurityRequirement(name = "bearerAuth"))
     public User me() {
         return currentUser.require();
+    }
+
+    @PutMapping("/me/contacts")
+    @Operation(summary = "Обновить email и Telegram chat_id для уведомлений",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    public User updateContacts(@Valid @RequestBody UpdateContactsRequest req) {
+        User u = currentUser.require();
+        return userService.updateContacts(u.getId(), req.getEmail(), req.getTelegramChatId());
     }
 }

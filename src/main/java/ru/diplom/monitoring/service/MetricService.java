@@ -8,7 +8,9 @@ import ru.diplom.monitoring.dto.MetricIngestRequest;
 import ru.diplom.monitoring.dto.MetricSummary;
 import ru.diplom.monitoring.dto.TimeSeriesPoint;
 import ru.diplom.monitoring.model.Metric;
+import ru.diplom.monitoring.model.MetricDownsample;
 import ru.diplom.monitoring.model.MetricType;
+import ru.diplom.monitoring.repository.MetricDownsampleRepository;
 import ru.diplom.monitoring.repository.MetricRepository;
 
 import java.time.Duration;
@@ -30,11 +32,13 @@ import java.util.concurrent.atomic.AtomicLong;
 public class MetricService {
 
     private final MetricRepository repo;
+    private final MetricDownsampleRepository downRepo;
     /** Счётчик принятых через ingest точек (живёт в рамках процесса; для статистики). */
     private final AtomicLong totalIngested = new AtomicLong(0);
 
-    public MetricService(MetricRepository repo) {
+    public MetricService(MetricRepository repo, MetricDownsampleRepository downRepo) {
         this.repo = repo;
+        this.downRepo = downRepo;
     }
 
     public Metric ingest(String nodeId, String ownerId, MetricIngestRequest req) {
@@ -129,6 +133,18 @@ public class MetricService {
         if (from == null) from = Instant.now().minus(Duration.ofHours(1));
         if (to == null) to = Instant.now();
 
+        // Если окно длинное (> 6 часов) и bucket >= 5 мин — читаем из metrics_5m
+        // (downsampled-серий) вместо raw: меньше IO и аналогичная визуальная точность.
+        // Это та же идея, что в Thanos Querier: «выбираем разрешение под окно».
+        boolean wideWindow = Duration.between(from, to).toHours() >= 6;
+        if (wideWindow && bucketSeconds >= 300) {
+            List<TimeSeriesPoint> ds = timeseriesFromDownsampled(
+                    ownerId, nodeId, metricName, from, to, bucketSeconds);
+            if (!ds.isEmpty()) return ds;
+            // если по downsampled пусто (например, ещё не пробежал compactor) —
+            // не молчим, а падаем на raw ниже.
+        }
+
         // забираем все точки окна; репозиторий вернёт DESC по timestamp
         List<Metric> rows = repo.search(ownerId, nodeId, metricName, from, to,
                 PageRequest.of(0, 100_000));
@@ -169,6 +185,57 @@ public class MetricService {
             count++;
         }
         // финальный bucket
+        if (currentBucketStart != -1) {
+            out.add(new TimeSeriesPoint(Instant.ofEpochMilli(currentBucketStart),
+                    count, min, max, count == 0 ? 0 : sum / count, last));
+        }
+        return out;
+    }
+
+    /**
+     * Тот же time-series, но читаем из metrics_5m (downsampled).
+     * Если bucketSeconds кратен 300 (т.е. >= 5 мин), мы можем «склеить»
+     * соседние 5-минутки в больший bucket: count суммируется, min/max — берётся
+     * крайний, avg = sum/count, last — последний по времени.
+     */
+    private List<TimeSeriesPoint> timeseriesFromDownsampled(String ownerId, String nodeId,
+                                                            String metricName, Instant from,
+                                                            Instant to, int bucketSeconds) {
+        List<MetricDownsample> rows = downRepo.search(ownerId, nodeId, metricName, from, to,
+                PageRequest.of(0, 100_000));
+        if (rows.isEmpty()) return Collections.emptyList();
+
+        // downsample-репозиторий возвращает ASC by bucketStart
+        long bucketMs = bucketSeconds * 1000L;
+        long fromMs = from.toEpochMilli();
+        long alignedFromMs = (fromMs / bucketMs) * bucketMs;
+
+        List<TimeSeriesPoint> out = new ArrayList<>();
+        long currentBucketStart = -1;
+        long count = 0;
+        double sum = 0, min = 0, max = 0, last = 0;
+
+        for (MetricDownsample d : rows) {
+            long ts = d.getBucketStart().toEpochMilli();
+            long bucketStart = alignedFromMs + ((ts - alignedFromMs) / bucketMs) * bucketMs;
+            if (currentBucketStart == -1) {
+                currentBucketStart = bucketStart;
+                count = 0; sum = 0;
+                min = d.getMin(); max = d.getMax(); last = d.getLast();
+            }
+            if (bucketStart != currentBucketStart) {
+                out.add(new TimeSeriesPoint(Instant.ofEpochMilli(currentBucketStart),
+                        count, min, max, count == 0 ? 0 : sum / count, last));
+                currentBucketStart = bucketStart;
+                count = 0; sum = 0;
+                min = d.getMin(); max = d.getMax(); last = d.getLast();
+            }
+            count += d.getCount();
+            sum += d.getSum();
+            if (d.getMin() < min) min = d.getMin();
+            if (d.getMax() > max) max = d.getMax();
+            last = d.getLast();
+        }
         if (currentBucketStart != -1) {
             out.add(new TimeSeriesPoint(Instant.ofEpochMilli(currentBucketStart),
                     count, min, max, count == 0 ? 0 : sum / count, last));

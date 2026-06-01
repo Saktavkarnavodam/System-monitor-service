@@ -21,10 +21,6 @@
       <button class="secondary" onclick="doRegister()">Регистрация</button>
     </div>
     <div class="err" id="authErr"></div>
-    <div class="hint">
-      По умолчанию доступен админ: <b>admin</b> / <b>admin123</b><br/>
-      Или зарегистрируйте нового пользователя — каждый видит только свои узлы.
-    </div>
   </div>
 </div>
 
@@ -34,9 +30,11 @@
   <h1>Система мониторинга распределённых систем</h1>
   <div>
     <span class="user">Пользователь: <b id="currentUser">—</b> <span id="currentRole" class="muted"></span></span>
+    <button onclick="openContactsModal()">Контакты для алертов</button>
+    <button id="notifSettingsBtn" style="display:none" onclick="openNotifSettings()">Настройки уведомлений</button>
     <button onclick="logout()">Выйти</button>
   </div>
-  <div>
+  <div id="adminTools" style="display:none">
     <span id="updated"></span>
     <span class="links">
       <a href="/swagger-ui.html"  target="_blank">Swagger UI</a>
@@ -130,6 +128,7 @@
           <input type="checkbox" id="nmAutoRefresh" checked /> авто-обновление 5с
         </label>
       </span>
+      <button id="nmShowHidden" class="secondary-btn" style="display:none; margin-left: 16px;" onclick="showHiddenCharts()">Показать скрытые</button>
     </div>
 
     <div id="nmCustomRange" class="controls" style="display:none; gap: 8px; padding: 10px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; margin-bottom: 12px;">
@@ -138,6 +137,59 @@
       <span class="label">до:</span>
       <input type="datetime-local" id="nmCustomTo" />
       <button class="primary-btn" onclick="applyCustomRange()">Применить</button>
+    </div>
+
+    <div class="health-panel" id="nmHealth" style="margin-bottom: 12px; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em;">Состояние агента</div>
+          <div id="nmHealthLine" style="margin-top: 4px;">—</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="secondary-btn" onclick="probeCurrentNode()">Проверить узел</button>
+          <button class="primary-btn"   onclick="reinstallCurrentNode()">Переустановить агента</button>
+        </div>
+      </div>
+      <div id="nmProbeResult" class="muted" style="font-size: 11px; margin-top: 8px; min-height: 14px;"></div>
+    </div>
+
+    <!-- ====== Сервисы на узле (Variant B) ====== -->
+    <div class="services-panel" id="nmServicesPanel" style="margin-bottom: 12px; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <div>
+          <div style="font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em;">Сервисы на узле</div>
+          <div class="muted" style="font-size: 11px; margin-top: 2px;">
+            TCP-проверка по каждому порту. Адрес узла (host): <span id="nmHostText">—</span>
+            <button class="link-btn" style="background:none;border:0;color:#60a5fa;cursor:pointer;padding:0;font-size:11px;" onclick="editNodeHost()">изменить</button>
+          </div>
+        </div>
+        <div>
+          <button class="secondary-btn" onclick="probeServicesNow()">Прозвонить</button>
+        </div>
+      </div>
+
+      <table id="nmServicesTable" style="width:100%; margin-top: 10px; font-size: 12px; border-collapse: collapse;">
+        <thead>
+          <tr style="color:#94a3b8; text-align: left;">
+            <th style="padding: 4px 8px;">Имя</th>
+            <th style="padding: 4px 8px;">Порт</th>
+            <th style="padding: 4px 8px;">Статус</th>
+            <th style="padding: 4px 8px;"></th>
+          </tr>
+        </thead>
+        <tbody id="nmServicesTbody">
+          <tr><td colspan="4" class="muted" style="padding: 6px 8px;">Сервисов пока нет.</td></tr>
+        </tbody>
+        <tfoot>
+          <tr style="border-top: 1px dashed #334155;">
+            <td style="padding: 6px 4px;"><input type="text" id="nmNewSvcName" placeholder="имя (web, db, …)" maxlength="64" style="width: 100%;" /></td>
+            <td style="padding: 6px 4px;"><input type="number" id="nmNewSvcPort" placeholder="порт" min="1" max="65535" style="width: 100%;" /></td>
+            <td style="padding: 6px 4px;"></td>
+            <td style="padding: 6px 4px;"><button class="primary-btn" onclick="addService()">+ Добавить</button></td>
+          </tr>
+        </tfoot>
+      </table>
+      <div id="nmServicesErr" style="color:#ef4444; font-size: 11px; margin-top: 6px; min-height: 14px;"></div>
     </div>
 
     <div id="nmCharts" class="charts-grid"></div>
@@ -163,34 +215,35 @@
       <button class="secondary-btn" onclick="closeAddNodeWizard()">Закрыть</button>
     </div>
 
-    <!-- ШАГ 1: имя токена + ОС + имя узла -->
+    <!-- ШАГ 1: ОС + имя узла -->
     <div id="wizStep1">
-      <label>Имя токена</label>
-      <input type="text" id="wizTokenName" placeholder="например: production-fleet" maxlength="64" />
+      <div id="wizReconnectHint" style="display:none; margin-bottom: 14px; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 6px; font-size: 12px; line-height: 1.5;">
+        Это режим <b>переустановки</b>. Имя узла уже подставлено — после установки агент по нему найдёт существующий узел и переиспользует его id (метрики и алерты не потеряются).
+      </div>
 
-      <label>ОС целевой машины</label>
+      <label id="wizOsLabel">ОС целевой машины</label>
       <div class="os-tabs">
-        <div class="os-tab active" data-os="linux"   onclick="selectOs('linux')">Linux / macOS (Python)</div>
+        <div class="os-tab active" data-os="linux"   onclick="selectOs('linux')">Linux (systemd)</div>
         <div class="os-tab"        data-os="windows" onclick="selectOs('windows')">Windows</div>
-        <div class="os-tab"        data-os="bash"    onclick="selectOs('bash')">Linux (Bash)</div>
       </div>
 
       <label>Имя узла (необязательно — по умолчанию hostname)</label>
       <input type="text" id="wizNodeName" placeholder="" maxlength="64" />
 
+      <input type="hidden" id="wizTokenName" />
+
+      <div class="muted" style="font-size: 11px; line-height: 1.55; margin-top: 14px; padding: 10px; background: #1e293b; border-left: 2px solid #475569; border-radius: 4px;">
+        Команда установки создаёт <b>системный сервис</b> с автозапуском при загрузке узла и автоматическим перезапуском при падении агента. Нужны права <code>sudo</code> (Linux) / Administrator (Windows). После установки никаких ручных действий на узле больше не требуется.
+      </div>
+
       <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
         <button class="secondary-btn" onclick="closeAddNodeWizard()">Отмена</button>
-        <button class="primary-btn"   onclick="wizGenerateToken()">Получить команду →</button>
+        <button class="primary-btn"   onclick="wizGenerateToken()">Получить команду установки →</button>
       </div>
     </div>
 
-    <!-- ШАГ 2: токен + install-команда -->
+    <!-- ШАГ 2: install-команда (токен скрыт внутри неё) -->
     <div id="wizStep2" style="display:none;">
-      <div class="token-once">
-        <b>Токен показывается один раз.</b> Скопируйте сейчас — потом сервер хранит только хеш.
-        <code id="wizTokenValue">agt_…</code>
-      </div>
-
       <label>Запустите эту команду на целевой машине:</label>
       <div class="install-cmd-box" id="wizInstallCmd">
         <button class="copy-btn" onclick="copyInstallCmd(this)">Копировать</button>
@@ -198,7 +251,7 @@
       </div>
 
       <div class="muted" style="font-size: 12px; line-height: 1.5; margin-top: 10px;">
-        Через ~10 секунд узел появится в списке. Один токен можно использовать на нескольких машинах — каждая зарегистрируется отдельным узлом по своему hostname.
+        Через ~10 секунд узел появится в списке. После установки агент запускается как сервис: переживёт reboot, авто-рестарт при падении, ручной запуск больше не нужен.
       </div>
 
       <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 22px;">
@@ -207,14 +260,17 @@
       </div>
     </div>
 
-    <div id="wizTokenList" style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #334155;">
-      <div style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;">
-        Активные токены
+    <details id="wizTokenList" style="margin-top: 24px; padding-top: 18px; border-top: 1px solid #334155;">
+      <summary style="font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; cursor: pointer; user-select: none;">
+        Управление токенами (продвинутый режим)
+      </summary>
+      <div class="muted" style="font-size: 11px; line-height: 1.5; margin: 8px 0;">
+        Здесь видны agent-токены, выпущенные для твоих узлов. Обычно сюда заходить не нужно — токены автоматически отзываются, когда выпускается новый. Используй, если хочешь принудительно отозвать токен (например, узел украли).
       </div>
       <div id="wizTokenListBody" class="token-list">
         <div class="muted" style="font-size: 12px;">загрузка…</div>
       </div>
-    </div>
+    </details>
   </div>
 </div>
 
@@ -282,6 +338,21 @@
       <input type="checkbox" id="ruleEnabled" checked /> Включено
     </label>
 
+    <div style="margin-top: 14px; padding: 10px; background: #1e293b; border: 1px solid #334155; border-radius: 6px;">
+      <div class="label" style="font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #94a3b8; margin-bottom: 8px;">
+        Уведомления при срабатывании
+      </div>
+      <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin-right: 16px;">
+        <input type="checkbox" id="ruleNotifyTelegram" /> Telegram
+      </label>
+      <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer;">
+        <input type="checkbox" id="ruleNotifyEmail" /> Email
+      </label>
+      <div class="muted" style="font-size: 11px; margin-top: 6px;">
+        Каналы используют контакты из «Контакты для алертов» в шапке.
+      </div>
+    </div>
+
     <div id="ruleHint" class="muted" style="font-size: 11px; margin-top: 14px;"></div>
     <div id="ruleErr" style="color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px;"></div>
 
@@ -342,6 +413,106 @@
   </div>
 </div>
 
+<!-- ====== Contacts modal ====== -->
+<div id="contactsModal" class="wiz-modal" onclick="if(event.target===this)closeContactsModal()">
+  <div class="wiz-box" style="max-width: 480px;">
+    <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <div>
+        <h2>Контакты для уведомлений</h2>
+        <div class="step-meta">куда слать алерты, если канал включён в правиле</div>
+      </div>
+      <button class="secondary-btn" onclick="closeContactsModal()">Закрыть</button>
+    </div>
+
+    <label>Email</label>
+    <input type="email" id="ctcEmail" placeholder="alex@example.com" maxlength="200" />
+
+    <label>Telegram chat_id</label>
+    <input type="text" id="ctcTelegramChatId" placeholder="123456789" maxlength="64" />
+    <div class="muted" style="font-size: 11px; margin-top: 6px; line-height: 1.5;">
+      Чтобы получить chat_id: напишите боту <b>@userinfobot</b> команду «/start» — он сразу пришлёт ваш <code>chat_id</code>.
+    </div>
+
+    <div id="ctcStatus" class="muted" style="font-size: 11px; margin-top: 12px; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 6px;">
+      проверка…
+    </div>
+
+    <div id="ctcErr" style="color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px;"></div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px;">
+      <button class="secondary-btn" onclick="closeContactsModal()">Отмена</button>
+      <button class="primary-btn"   onclick="saveContacts()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== Notification settings modal (admin only) ====== -->
+<div id="notifSettingsModal" class="wiz-modal" onclick="if(event.target===this)closeNotifSettings()">
+  <div class="wiz-box" style="max-width: 640px;">
+    <div style="display:flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+      <div>
+        <h2>Настройки уведомлений</h2>
+        <div class="step-meta">глобальные секреты Telegram + SMTP (хранятся в БД, видны только админам)</div>
+      </div>
+      <button class="secondary-btn" onclick="closeNotifSettings()">Закрыть</button>
+    </div>
+
+    <div id="nsStatus" class="muted" style="font-size: 12px; margin: 8px 0 16px 0; padding: 8px 10px; background: #1e293b; border: 1px solid #334155; border-radius: 6px;">
+      Статус каналов: <span id="nsStatusVal">загрузка…</span>
+    </div>
+
+    <div style="font-size: 12px; color:#94a3b8; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px;">Telegram</div>
+    <label>Bot Token (получить у @BotFather)</label>
+    <input type="text" id="nsTgToken" placeholder="123456789:ABCdef…" maxlength="200" />
+
+    <div style="font-size: 12px; color:#94a3b8; text-transform: uppercase; letter-spacing: .08em; margin: 16px 0 6px 0;">SMTP / Email</div>
+    <div style="display:grid; grid-template-columns: 2fr 1fr; gap: 12px;">
+      <div>
+        <label>SMTP host</label>
+        <input type="text" id="nsSmtpHost" placeholder="smtp.yandex.ru" maxlength="200" />
+      </div>
+      <div>
+        <label>Port</label>
+        <input type="number" id="nsSmtpPort" placeholder="587" />
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+      <div>
+        <label>Username</label>
+        <input type="text" id="nsSmtpUser" placeholder="alerts@mydomain.ru" maxlength="200" />
+      </div>
+      <div>
+        <label>Password (оставьте пусто, чтобы не менять)</label>
+        <input type="password" id="nsSmtpPass" placeholder="••••••••" maxlength="200" />
+      </div>
+    </div>
+    <label>Email From (адрес отправителя)</label>
+    <input type="email" id="nsEmailFrom" placeholder="alerts@mydomain.ru" maxlength="200" />
+    <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 10px;">
+      <input type="checkbox" id="nsStarttls" checked /> STARTTLS (для большинства провайдеров — включить)
+    </label>
+
+    <div class="muted" style="font-size: 11px; line-height: 1.55; margin-top: 14px; padding: 8px 10px; background: #1e293b; border-left: 2px solid #475569; border-radius: 4px;">
+      <b>Откуда придёт письмо?</b> С того адреса, который вы укажете в «Email From», а доставляться оно будет через тот SMTP-сервер и логин/пароль, что заданы выше.
+      Пример: для Яндекса — host <code>smtp.yandex.ru</code>, port <code>587</code>, username = ваш ящик, password = <a href="https://id.yandex.ru/security/app-passwords" target="_blank">пароль приложения</a>; для mail.ru — <code>smtp.mail.ru</code> + аналогичный пароль приложения; для Gmail — <code>smtp.gmail.com</code> + app password.
+    </div>
+
+    <div id="nsErr" style="color: #ef4444; font-size: 12px; margin-top: 10px; min-height: 16px;"></div>
+    <div id="nsOk"  style="color: #22c55e; font-size: 12px; margin-top: 4px;  min-height: 16px;"></div>
+
+    <div style="display: flex; justify-content: space-between; gap: 8px; margin-top: 18px;">
+      <div style="display:flex; gap: 8px;">
+        <button class="secondary-btn" onclick="testNotif('telegram')">Тест Telegram</button>
+        <button class="secondary-btn" onclick="testNotif('email')">Тест Email</button>
+      </div>
+      <div style="display:flex; gap: 8px;">
+        <button class="secondary-btn" onclick="closeNotifSettings()">Отмена</button>
+        <button class="primary-btn"   onclick="saveNotifSettings()">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/js/utils.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/dashboard.js"></script>
@@ -349,6 +520,8 @@
 <script src="/js/analysis.js"></script>
 <script src="/js/wizard.js"></script>
 <script src="/js/rules.js"></script>
+<script src="/js/contacts.js"></script>
+<script src="/js/notification-settings.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>

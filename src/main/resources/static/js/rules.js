@@ -79,6 +79,8 @@ function openRuleModal(id) {
     document.getElementById('ruleSeverity').value    = r.severity || 'WARNING';
     document.getElementById('ruleDescription').value = r.description || '';
     document.getElementById('ruleEnabled').checked   = !!r.enabled;
+    document.getElementById('ruleNotifyTelegram').checked = !!r.notifyTelegram;
+    document.getElementById('ruleNotifyEmail').checked    = !!r.notifyEmail;
     document.getElementById('ruleDeleteBtn').style.display = 'inline-block';
   } else {
     document.getElementById('ruleModalTitle').textContent = 'Новое правило алерта';
@@ -92,6 +94,8 @@ function openRuleModal(id) {
     document.getElementById('ruleSeverity').value    = 'WARNING';
     document.getElementById('ruleDescription').value = '';
     document.getElementById('ruleEnabled').checked   = true;
+    document.getElementById('ruleNotifyTelegram').checked = false;
+    document.getElementById('ruleNotifyEmail').checked    = false;
     document.getElementById('ruleDeleteBtn').style.display = 'none';
   }
   document.getElementById('ruleModal').classList.add('open');
@@ -132,6 +136,8 @@ async function saveRule() {
   const severity    = document.getElementById('ruleSeverity').value;
   const description = document.getElementById('ruleDescription').value.trim();
   const enabled     = document.getElementById('ruleEnabled').checked;
+  const notifyTelegram = document.getElementById('ruleNotifyTelegram').checked;
+  const notifyEmail    = document.getElementById('ruleNotifyEmail').checked;
 
   if (!name)                     { errEl.textContent = 'Укажите имя правила'; return; }
   if (!metricName)               { errEl.textContent = 'Укажите имя метрики'; return; }
@@ -146,8 +152,24 @@ async function saveRule() {
     severity,
     description: description || null,
     enabled,
+    notifyTelegram,
+    notifyEmail,
   };
   if (id) body.id = id;
+
+  // Быстрая проверка на дубль (та же логика и на сервере): одинаковые метрика +
+  // условие + порог + узел = оба правила сработают вместе и уведомления придут дважды.
+  const dup = (_rulesCache.rules || []).find(r =>
+    r.id !== id &&
+    (r.metricName || '').trim() === metricName &&
+    r.condition === condition &&
+    Number(r.threshold) === threshold &&
+    (r.nodeId || null) === (nodeId || null));
+  if (dup) {
+    errEl.textContent = `Дубль: правило «${dup.name}» уже отслеживает ${metricName} ${COND_LABEL[condition] || condition} ${threshold}` +
+      `${nodeId ? ' на этом узле' : ' (все узлы)'}. Уведомления придут дважды — измените метрику, условие или порог.`;
+    return;
+  }
 
   try {
     await api('/api/v1/alerts/rules', { method: 'POST', body: JSON.stringify(body) });
